@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import Logger from '../../typescript/Logger';
-import { TweetFilter } from '../../typescript/TweetFilter';
-import { TweetProcessor } from '../../typescript/TweetProcessor';
-import type { Tweet, User } from '../../typescript/types';
+import Logger from '../typescript/Logger';
+import { TweetFilter } from '../typescript/TweetFilter';
+import { TweetProcessor } from '../typescript/TweetProcessor';
+import type { Tweet, User } from '../typescript/types';
 
 describe('TypeScript Module Structure', () => {
   it('should import TypeScript modules from typescript directory', () => {

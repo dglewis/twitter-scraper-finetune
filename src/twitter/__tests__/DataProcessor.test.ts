@@ -1,22 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type { Tweet } from '../../typescript/types';
-import { DataProcessor } from '../../typescript/DataProcessor';
+import type { Tweet } from '../typescript/types';
+import { DataProcessor } from '../typescript/DataProcessor';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-vi.mock('fs/promises');
-vi.mock('path');
+vi.mock('fs', () => ({
+  promises: {
+    mkdir: vi.fn(),
+    writeFile: vi.fn(),
+    readFile: vi.fn(),
+  },
+}));
 
 describe('DataProcessor', () => {
   let processor: DataProcessor;
-  const mockUsername = 'testuser';
-  const mockBaseDir = 'pipeline';
-  const mockDate = new Date('2024-01-08');
+  const baseDir = '/test/data';
+  const username = 'testuser';
 
   beforeEach(() => {
-    vi.resetAllMocks();
-    vi.setSystemTime(mockDate);
-    processor = new DataProcessor(mockBaseDir, mockUsername);
+    vi.clearAllMocks();
+    processor = new DataProcessor(baseDir, username);
   });
 
   describe('Directory Structure', () => {
@@ -52,11 +55,12 @@ describe('DataProcessor', () => {
     });
 
     it('should use lowercase username in paths', () => {
-      const processor = new DataProcessor(mockBaseDir, 'TestUser');
       const paths = processor.getPaths();
 
-      Object.values(paths).flat().forEach(p => {
-        expect(p).toContain('testuser');
+      Object.values(paths).forEach(category => {
+        Object.values(category).forEach(p => {
+          expect(p).toContain('testuser');
+        });
       });
     });
   });
@@ -64,6 +68,7 @@ describe('DataProcessor', () => {
   describe('Token Management', () => {
     it('should save and retrieve next token', async () => {
       const mockToken = 'test_token_123';
+      vi.mocked(fs.readFile).mockResolvedValueOnce(mockToken);
 
       await processor.saveNextToken(mockToken);
       const retrievedToken = await processor.getLastNextToken();
@@ -80,6 +85,7 @@ describe('DataProcessor', () => {
       vi.mocked(fs.readFile).mockRejectedValueOnce(new Error('File not found'));
 
       const token = await processor.getLastNextToken();
+
       expect(token).toBeNull();
     });
   });
@@ -87,30 +93,55 @@ describe('DataProcessor', () => {
   describe('Data Processing', () => {
     const mockTweets: Tweet[] = [
       {
-        id_str: '1',
-        created_at: '2024-01-08T12:00:00Z',
+        id_str: '123',
         text: 'Test tweet 1',
-        user: {
-          id_str: '123',
-          screen_name: 'testuser',
-          name: 'Test User',
-          description: 'Test description',
-          followers_count: 100,
-          friends_count: 50,
-          verified: false
-        },
-        retweet_count: 5,
+        created_at: '2023-01-01T12:00:00.000Z',
         favorite_count: 10,
-        entities: {
-          hashtags: [],
-          urls: [],
-          user_mentions: []
-        },
+        retweet_count: 5,
         in_reply_to_status_id_str: null,
         in_reply_to_user_id_str: null,
         quoted_status_id_str: null,
-        retweeted_status_id_str: null
-      }
+        retweeted_status_id_str: null,
+        user: {
+          id_str: 'user123',
+          screen_name: 'testuser',
+          name: 'Test User',
+          description: 'Test user description',
+          followers_count: 100,
+          friends_count: 50,
+          verified: false,
+        },
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [],
+        },
+      },
+      {
+        id_str: '456',
+        text: 'Test tweet 2',
+        created_at: '2023-01-02T12:00:00.000Z',
+        favorite_count: 20,
+        retweet_count: 8,
+        in_reply_to_status_id_str: '789',
+        in_reply_to_user_id_str: 'user789',
+        quoted_status_id_str: null,
+        retweeted_status_id_str: null,
+        user: {
+          id_str: 'user123',
+          screen_name: 'testuser',
+          name: 'Test User',
+          description: 'Test user description',
+          followers_count: 100,
+          friends_count: 50,
+          verified: false,
+        },
+        entities: {
+          hashtags: [],
+          urls: [{ url: 'https://test.com', expanded_url: 'https://test.com', display_url: 'test.com' }],
+          user_mentions: [],
+        },
+      },
     ];
 
     it('should save tweets and generate all required files', async () => {
@@ -131,53 +162,85 @@ describe('DataProcessor', () => {
         expect.any(String),
         'utf-8'
       );
+      expect(fs.writeFile).toHaveBeenCalledWith(
+        expect.stringContaining('finetuning.jsonl'),
+        expect.any(String),
+        'utf-8'
+      );
     });
 
     it('should generate correct analytics', () => {
       const analytics = processor.generateAnalytics(mockTweets);
 
       expect(analytics).toEqual({
-        totalTweets: 1,
+        totalTweets: 2,
         directTweets: 1,
-        replies: 0,
+        replies: 1,
         retweets: 0,
         engagement: {
-          totalLikes: 10,
-          totalRetweetCount: 5,
+          totalLikes: 30,
+          totalRetweetCount: 13,
           totalReplies: 0,
-          averageLikes: '10.00',
-          topTweets: expect.any(Array)
+          averageLikes: '15.00',
+          topTweets: expect.any(Array),
         },
         timeRange: {
-          start: '2024-01-08',
-          end: '2024-01-08'
+          start: '2023-01-01',
+          end: '2023-01-02',
         },
         contentTypes: {
           withImages: 0,
           withVideos: 0,
-          withLinks: 0,
-          textOnly: 1
-        }
+          withLinks: 1,
+          textOnly: 1,
+        },
       });
     });
 
     it('should handle empty tweet arrays in analytics', () => {
       const analytics = processor.generateAnalytics([]);
 
-      expect(analytics.totalTweets).toBe(0);
-      expect(analytics.engagement.averageLikes).toBe('0.00');
-      expect(analytics.timeRange.start).toBe('N/A');
+      expect(analytics).toEqual({
+        totalTweets: 0,
+        directTweets: 0,
+        replies: 0,
+        retweets: 0,
+        engagement: {
+          totalLikes: 0,
+          totalRetweetCount: 0,
+          totalReplies: 0,
+          averageLikes: '0.00',
+          topTweets: [],
+        },
+        timeRange: {
+          start: 'N/A',
+          end: 'N/A',
+        },
+        contentTypes: {
+          withImages: 0,
+          withVideos: 0,
+          withLinks: 0,
+          textOnly: 0,
+        },
+      });
     });
 
     it('should generate fine-tuning data', () => {
       const finetuningData = processor.generateFinetuningData(mockTweets);
 
-      expect(finetuningData).toEqual([
-        expect.objectContaining({
-          text: expect.any(String),
-          metadata: expect.any(Object)
-        })
-      ]);
+      expect(finetuningData).toHaveLength(2);
+      expect(finetuningData[0]).toEqual({
+        text: mockTweets[0].text,
+        metadata: {
+          id: mockTweets[0].id_str,
+          created_at: expect.any(String),
+          metrics: {
+            likes: mockTweets[0].favorite_count,
+            retweets: mockTweets[0].retweet_count,
+            replies: 0,
+          },
+        },
+      });
     });
   });
 });
