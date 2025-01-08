@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { TweetFilter } from '../TweetFilter.ts';
-import type { Tweet } from '../types';
+import { TweetFilter } from '../typescript/TweetFilter';
+import type { Tweet } from '../typescript/types';
 
 console.log('Module import:', { TweetFilter });
 

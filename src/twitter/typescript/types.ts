@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Ora } from 'ora';
 
 // Twitter API Response Types
 export const TweetSchema = z.object({
@@ -107,6 +108,11 @@ export interface Logger {
 
 export interface LoggerConstructor {
   new(): never;
+  spinner: Ora | null;
+  progressBar: any | null;
+  lastUpdate: number;
+  collectionStats: CollectionStats;
+  isDebugEnabled: boolean;
   startSpinner(text: string): void;
   stopSpinner(success?: boolean): void;
   info(msg: string): void;
@@ -119,6 +125,7 @@ export interface LoggerConstructor {
   recordRateLimit(): void;
   stats(title: string, data: Record<string, unknown>): void;
   reset(): void;
+  prototype: Logger;
 }
 
 // Processed Tweet Types

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import LoggerTS from '../LoggerTS';
+import Logger from '../typescript/Logger';
+import type { Logger as LoggerType } from '../typescript/types';
 
 describe('Logger', () => {
   const consoleSpy = {
@@ -7,11 +8,11 @@ describe('Logger', () => {
     clear: vi.spyOn(console, 'clear').mockImplementation(() => {})
   };
 
-  let logger: LoggerTS;
+  let logger: LoggerType;
 
   beforeEach(() => {
     // Reset the logger before each test
-    logger = Object.create(LoggerTS.prototype);
+    logger = Object.create(Logger.prototype);
     logger.reset();
     vi.clearAllMocks();
   });
@@ -42,11 +43,11 @@ describe('Logger', () => {
     });
 
     it('should only log debug messages when enabled', () => {
-      LoggerTS.isDebugEnabled = false;
+      Logger.isDebugEnabled = false;
       logger.debug('test debug');
       expect(consoleSpy.log).not.toHaveBeenCalled();
 
-      LoggerTS.isDebugEnabled = true;
+      Logger.isDebugEnabled = true;
       logger.debug('test debug');
       expect(consoleSpy.log).toHaveBeenCalledWith(expect.stringContaining('test debug'));
     });
@@ -66,32 +67,32 @@ describe('Logger', () => {
 
       logger.updateCollectionProgress(progress);
 
-      expect(LoggerTS.collectionStats.batchesWithNewTweets).toBeGreaterThan(0);
-      expect(LoggerTS.collectionStats.totalBatches).toBe(1);
-      expect(LoggerTS.collectionStats.currentDelay).toBe(1000);
+      expect(Logger.collectionStats.batchesWithNewTweets).toBeGreaterThan(0);
+      expect(Logger.collectionStats.totalBatches).toBe(1);
+      expect(Logger.collectionStats.currentDelay).toBe(1000);
     });
 
     it('should handle rate limit recording', () => {
       logger.recordRateLimit();
-      expect(LoggerTS.collectionStats.rateLimitHits).toBe(1);
-      expect(LoggerTS.collectionStats.lastResetTime).not.toBeNull();
+      expect(Logger.collectionStats.rateLimitHits).toBe(1);
+      expect(Logger.collectionStats.lastResetTime).not.toBeNull();
     });
 
     it('should reset collection stats', () => {
       // First set some values
-      LoggerTS.collectionStats.rateLimitHits = 5;
-      LoggerTS.collectionStats.resets = 3;
-      LoggerTS.collectionStats.batchesWithNewTweets = 10;
-      LoggerTS.collectionStats.totalBatches = 20;
+      Logger.collectionStats.rateLimitHits = 5;
+      Logger.collectionStats.resets = 3;
+      Logger.collectionStats.batchesWithNewTweets = 10;
+      Logger.collectionStats.totalBatches = 20;
 
       // Then reset
       logger.reset();
 
       // Verify reset values
-      expect(LoggerTS.collectionStats.rateLimitHits).toBe(0);
-      expect(LoggerTS.collectionStats.resets).toBe(0);
-      expect(LoggerTS.collectionStats.batchesWithNewTweets).toBe(0);
-      expect(LoggerTS.collectionStats.totalBatches).toBe(0);
+      expect(Logger.collectionStats.rateLimitHits).toBe(0);
+      expect(Logger.collectionStats.resets).toBe(0);
+      expect(Logger.collectionStats.batchesWithNewTweets).toBe(0);
+      expect(Logger.collectionStats.totalBatches).toBe(0);
     });
   });
 
@@ -124,20 +125,20 @@ describe('Logger', () => {
   describe('Spinner Functions', () => {
     it('should start and stop spinner', () => {
       logger.startSpinner('Loading...');
-      expect(LoggerTS.spinner).not.toBeNull();
+      expect(Logger.spinner).not.toBeNull();
 
       logger.stopSpinner();
-      expect(LoggerTS.spinner).toBeNull();
+      expect(Logger.spinner).toBeNull();
     });
 
     it('should handle spinner success and failure', () => {
       logger.startSpinner('Loading...');
       logger.stopSpinner(true);
-      expect(LoggerTS.spinner).toBeNull();
+      expect(Logger.spinner).toBeNull();
 
       logger.startSpinner('Loading...');
       logger.stopSpinner(false);
-      expect(LoggerTS.spinner).toBeNull();
+      expect(Logger.spinner).toBeNull();
     });
   });
 });

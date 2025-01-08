@@ -4,9 +4,9 @@ import Table from 'cli-table3';
 import { format } from 'date-fns';
 import type { Logger, LoggerConstructor, CollectionStats, CollectionProgress, CollectionStatus } from './types';
 
-class LoggerTS implements Logger {
+class LoggerImpl implements Logger {
   private constructor() {
-    throw new Error('LoggerTS is a static class and cannot be instantiated');
+    throw new Error('Logger is a static class and cannot be instantiated');
   }
 
   static spinner: Ora | null = null;
@@ -28,13 +28,13 @@ class LoggerTS implements Logger {
   static isDebugEnabled = process.env.DEBUG === 'true';
 
   startSpinner(text: string): void {
-    LoggerTS.spinner = ora(text).start();
+    LoggerImpl.spinner = ora(text).start();
   }
 
   stopSpinner(success = true): void {
-    if (LoggerTS.spinner) {
-      success ? LoggerTS.spinner.succeed() : LoggerTS.spinner.fail();
-      LoggerTS.spinner = null;
+    if (LoggerImpl.spinner) {
+      success ? LoggerImpl.spinner.succeed() : LoggerImpl.spinner.fail();
+      LoggerImpl.spinner = null;
     }
   }
 
@@ -55,7 +55,7 @@ class LoggerTS implements Logger {
   }
 
   debug(msg: string): void {
-    if (LoggerTS.isDebugEnabled) {
+    if (LoggerImpl.isDebugEnabled) {
       console.log(chalk.gray(`🔍 Debug: ${msg}`));
     }
   }
@@ -72,36 +72,36 @@ class LoggerTS implements Logger {
     const now = Date.now();
 
     // Update stats
-    LoggerTS.collectionStats.totalBatches++;
-    if (newInBatch > 0) LoggerTS.collectionStats.batchesWithNewTweets++;
-    if (isReset) LoggerTS.collectionStats.resets++;
-    LoggerTS.collectionStats.currentDelay = currentDelay;
+    LoggerImpl.collectionStats.totalBatches++;
+    if (newInBatch > 0) LoggerImpl.collectionStats.batchesWithNewTweets++;
+    if (isReset) LoggerImpl.collectionStats.resets++;
+    LoggerImpl.collectionStats.currentDelay = currentDelay;
 
     // Update date range
     if (oldestTweetDate) {
-      LoggerTS.collectionStats.oldestTweet = !LoggerTS.collectionStats.oldestTweet ?
+      LoggerImpl.collectionStats.oldestTweet = !LoggerImpl.collectionStats.oldestTweet ?
         oldestTweetDate :
-        Math.min(LoggerTS.collectionStats.oldestTweet, oldestTweetDate);
+        Math.min(LoggerImpl.collectionStats.oldestTweet, oldestTweetDate);
     }
     if (newestTweetDate) {
-      LoggerTS.collectionStats.newestTweet = !LoggerTS.collectionStats.newestTweet ?
+      LoggerImpl.collectionStats.newestTweet = !LoggerImpl.collectionStats.newestTweet ?
         newestTweetDate :
-        Math.max(LoggerTS.collectionStats.newestTweet, newestTweetDate);
+        Math.max(LoggerImpl.collectionStats.newestTweet, newestTweetDate);
     }
 
     // Calculate efficiency metrics
-    const runningTime = (now - LoggerTS.collectionStats.startTime) / 1000 / 60; // minutes
-    LoggerTS.collectionStats.tweetsPerMinute = Number((totalCollected / runningTime).toFixed(1));
+    const runningTime = (now - LoggerImpl.collectionStats.startTime) / 1000 / 60; // minutes
+    LoggerImpl.collectionStats.tweetsPerMinute = Number((totalCollected / runningTime).toFixed(1));
 
     // Only update display every second to avoid spam
-    if (now - LoggerTS.lastUpdate > 1000) {
+    if (now - LoggerImpl.lastUpdate > 1000) {
       this.displayCollectionStatus({
         totalCollected,
         newInBatch,
         batchSize,
         isReset
       });
-      LoggerTS.lastUpdate = now;
+      LoggerImpl.lastUpdate = now;
     }
   }
 
@@ -125,16 +125,16 @@ class LoggerTS implements Logger {
     // Add current status
     table.push(
       ['Total Tweets Collected', chalk.green(totalCollected.toLocaleString())],
-      ['Collection Rate', `${chalk.cyan(LoggerTS.collectionStats.tweetsPerMinute)} tweets/minute`],
-      ['Current Delay', `${chalk.yellow(LoggerTS.collectionStats.currentDelay)}ms`],
-      ['Batch Efficiency', `${chalk.cyan((LoggerTS.collectionStats.batchesWithNewTweets / LoggerTS.collectionStats.totalBatches * 100).toFixed(1))}%`],
-      ['Position Resets', chalk.yellow(LoggerTS.collectionStats.resets)],
-      ['Rate Limit Hits', chalk.red(LoggerTS.collectionStats.rateLimitHits)]
+      ['Collection Rate', `${chalk.cyan(LoggerImpl.collectionStats.tweetsPerMinute)} tweets/minute`],
+      ['Current Delay', `${chalk.yellow(LoggerImpl.collectionStats.currentDelay)}ms`],
+      ['Batch Efficiency', `${chalk.cyan((LoggerImpl.collectionStats.batchesWithNewTweets / LoggerImpl.collectionStats.totalBatches * 100).toFixed(1))}%`],
+      ['Position Resets', chalk.yellow(LoggerImpl.collectionStats.resets)],
+      ['Rate Limit Hits', chalk.red(LoggerImpl.collectionStats.rateLimitHits)]
     );
 
     // Add date range if we have it
-    if (LoggerTS.collectionStats.oldestTweet) {
-      const dateRange = `${format(LoggerTS.collectionStats.oldestTweet, 'yyyy-MM-dd')} to ${format(LoggerTS.collectionStats.newestTweet!, 'yyyy-MM-dd')}`;
+    if (LoggerImpl.collectionStats.oldestTweet) {
+      const dateRange = `${format(LoggerImpl.collectionStats.oldestTweet, 'yyyy-MM-dd')} to ${format(LoggerImpl.collectionStats.newestTweet!, 'yyyy-MM-dd')}`;
       table.push(['Date Range', chalk.cyan(dateRange)]);
     }
 
@@ -146,13 +146,13 @@ class LoggerTS implements Logger {
     console.log(table.toString());
 
     // Add running time
-    const runningTime = Math.floor((Date.now() - LoggerTS.collectionStats.startTime) / 1000);
+    const runningTime = Math.floor((Date.now() - LoggerImpl.collectionStats.startTime) / 1000);
     console.log(chalk.dim(`\nRunning for ${Math.floor(runningTime / 60)}m ${runningTime % 60}s`));
   }
 
   recordRateLimit(): void {
-    LoggerTS.collectionStats.rateLimitHits++;
-    LoggerTS.collectionStats.lastResetTime = Date.now();
+    LoggerImpl.collectionStats.rateLimitHits++;
+    LoggerImpl.collectionStats.lastResetTime = Date.now();
   }
 
   stats(title: string, data: Record<string, unknown>): void {
@@ -168,7 +168,7 @@ class LoggerTS implements Logger {
   }
 
   reset(): void {
-    LoggerTS.collectionStats = {
+    LoggerImpl.collectionStats = {
       oldestTweet: null,
       newestTweet: null,
       rateLimitHits: 0,
@@ -180,69 +180,69 @@ class LoggerTS implements Logger {
       currentDelay: 0,
       lastResetTime: null
     };
-    LoggerTS.lastUpdate = Date.now();
+    LoggerImpl.lastUpdate = Date.now();
   }
 
   // Static methods that delegate to instance methods
   static startSpinner(text: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.startSpinner(text);
   }
 
   static stopSpinner(success = true): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.stopSpinner(success);
   }
 
   static info(msg: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.info(msg);
   }
 
   static success(msg: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.success(msg);
   }
 
   static warn(msg: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.warn(msg);
   }
 
   static error(msg: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.error(msg);
   }
 
   static debug(msg: string): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.debug(msg);
   }
 
   static updateCollectionProgress(progress: CollectionProgress): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.updateCollectionProgress(progress);
   }
 
   static displayCollectionStatus(status: CollectionStatus): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.displayCollectionStatus(status);
   }
 
   static recordRateLimit(): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.recordRateLimit();
   }
 
   static stats(title: string, data: Record<string, unknown>): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.stats(title, data);
   }
 
   static reset(): void {
-    const instance = Object.create(LoggerTS.prototype);
+    const instance = Object.create(LoggerImpl.prototype);
     instance.reset();
   }
 }
 
-export default LoggerTS as unknown as LoggerConstructor;
+export default LoggerImpl as unknown as LoggerConstructor;

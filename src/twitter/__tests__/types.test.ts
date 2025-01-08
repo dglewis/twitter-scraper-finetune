@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TweetSchema, UserSchema } from '../types';
+import { TweetSchema, UserSchema } from '../typescript/types';
 import { z } from 'zod';
 
 describe('Twitter Types', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { Tweet } from '../types';
-import { TweetProcessor } from '../TweetProcessor';
+import type { Tweet } from '../typescript/types';
+import { TweetProcessor } from '../typescript/TweetProcessor';
 
 describe('TweetProcessor', () => {
   describe('processTweet', () => {
