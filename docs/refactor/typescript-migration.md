@@ -17,6 +17,7 @@ This document outlines the strategy for migrating the Twitter scraper project fr
     - [Type System Best Practices](#type-system-best-practices)
     - [Error Handling Patterns](#error-handling-patterns)
     - [Documentation Standards](#documentation-standards)
+    - [Data Processing Patterns](#data-processing-patterns)
   - [Current Progress](#current-progress)
   - [Next Steps](#next-steps)
 
@@ -78,8 +79,9 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
 
 1. Migration Order (Updated):
    - ✅ Logger module (completed)
-   - 🔄 Twitter API types and interfaces (in progress)
-   - ⏳ Data processing utilities
+   - ✅ Twitter API types and interfaces (completed)
+   - ✅ Tweet processing (completed)
+   - 🔄 Data processing utilities (in progress)
    - ⏳ CLI interfaces
 
 2. Migration Strategy:
@@ -88,6 +90,9 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - Implement type-safe code
    - Validate existing functionality
    - Use instance methods with static state where appropriate
+   - Create standardized interfaces for processed data
+   - Implement data transformation utilities as classes
+   - Use composition over inheritance for processing pipelines
 
 3. Testing Strategy:
    - Co-locate tests with source code in `__tests__` directories
@@ -130,21 +135,35 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - No type assertions without validation
    - Prefer union types over enums
    - Use branded types for IDs
+   - Create standardized interfaces for processed data
+   - Use nullable types instead of undefined for optional fields
+   - Leverage type inference with proper type guards
 
 2. Type Safety Examples:
 ```typescript
-// Example of branded types
-type UserId = string & { readonly __brand: unique symbol };
-
-function createUserId(id: string): UserId {
-  return id as UserId;
+// Example of standardized processed data
+interface ProcessedData<T> {
+  id: string;
+  created_at: string;  // ISO 8601 format
+  raw: T;  // Original data
+  processed: {
+    // Standardized fields
+    metadata: Record<string, unknown>;
+    content: string;
+    references: string[];
+  };
 }
 
-// Example of discriminated unions
-type TwitterEvent =
-  | { type: 'tweet'; content: string }
-  | { type: 'retweet'; originalId: string }
-  | { type: 'like'; tweetId: string };
+// Example of type guard
+function isProcessedTweet(data: unknown): data is ProcessedTweet {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'id' in data &&
+    'text' in data &&
+    'created_at' in data
+  );
+}
 ```
 
 ### Error Handling Patterns
@@ -200,6 +219,35 @@ async function fetchUserTimeline(
 }
 ```
 
+### Data Processing Patterns
+
+```typescript
+// Example of a processor class
+class DataProcessor<T, U> {
+  constructor(private readonly schema: z.ZodSchema<T>) {}
+
+  async process(raw: unknown): Promise<U> {
+    // Validate input
+    const validated = this.schema.parse(raw);
+
+    // Transform data
+    const processed = this.transform(validated);
+
+    // Validate output
+    return this.validateOutput(processed);
+  }
+
+  protected transform(data: T): U {
+    throw new Error('Not implemented');
+  }
+
+  private validateOutput(data: U): U {
+    // Implement output validation
+    return data;
+  }
+}
+```
+
 ## Current Progress
 
 - ✅ TypeScript configuration
@@ -209,7 +257,8 @@ async function fetchUserTimeline(
 - ✅ Initial test infrastructure
 - ✅ Logger module migration
 - 🔄 Twitter API types
-- ⏳ Data processing utilities
+- ✅ Tweet processing
+- 🔄 Data processing utilities
 - ⏳ CLI interfaces
 
 ## Next Steps
