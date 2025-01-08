@@ -17,7 +17,10 @@ Implementation progress and current metrics are tracked separately in `typescrip
   - [Technology Stack](#technology-stack)
   - [Migration Strategy Updates](#migration-strategy-updates)
     - [Phase 1: Initial Setup (Completed)](#phase-1-initial-setup-completed)
-    - [Phase 2: Module Migration (In Progress)](#phase-2-module-migration-in-progress)
+    - [Phase 2: Module Migration](#phase-2-module-migration)
+    - [File Organization](#file-organization)
+    - [Migration Process](#migration-process)
+    - [Testing Strategy](#testing-strategy)
     - [Phase 3: Validation and Cleanup](#phase-3-validation-and-cleanup)
   - [Implementation Guidelines](#implementation-guidelines)
     - [Type System Best Practices](#type-system-best-practices)
@@ -25,8 +28,7 @@ Implementation progress and current metrics are tracked separately in `typescrip
     - [Documentation Standards](#documentation-standards)
     - [Data Processing Patterns](#data-processing-patterns)
     - [Test Coverage Requirements](#test-coverage-requirements)
-  - [Current Progress](#current-progress)
-  - [Next Steps](#next-steps)
+  - [Migration Status](#migration-status)
 
 ## Prerequisites (Completed)
 
@@ -82,57 +84,74 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - Added type-safe error context
    - Full test coverage for error utilities
 
-### Phase 2: Module Migration (In Progress)
+### Phase 2: Module Migration
 
-1. Migration Order (Updated):
-   - ✅ Logger module (completed)
-   - ✅ Twitter API types and interfaces (completed)
-   - ✅ Tweet processing (completed)
-   - 🔄 Data processing utilities (in progress)
-   - ⏳ CLI interfaces
+The migration order and current status are tracked in `typescript-migration-progress.md`. This section defines the migration approach for each module:
 
-2. File Organization:
-   - TypeScript implementations live in a `typescript` subdirectory
-   - Original JavaScript files remain in their current location
-   - Tests import from the typescript directory
-   - This structure ensures:
-     - Clear separation between JS and TS code
-     - No naming conflicts during migration
-     - Easy path to eventual replacement
-     - Clear migration boundaries
+1. Logger Module:
+   - Instance-based implementation with static state
+   - Type-safe logging methods
+   - Collection stats tracking
+   - Progress display utilities
 
-3. Migration Strategy:
-   - Define interfaces before implementation
-   - Write comprehensive tests
-   - Implement type-safe code
-   - Validate existing functionality
-   - Keep TypeScript implementations completely separate from JavaScript ones
-   - Never modify JavaScript files - they are the source of truth
-   - Create new TypeScript files alongside existing JavaScript ones
-   - Don't try to make TypeScript code import from or depend on JavaScript files
-   - Let the JavaScript implementation continue serving production until TypeScript migration is complete
+2. Twitter API Types:
+   - Zod schemas for runtime validation
+   - Comprehensive type definitions
+   - Optional field handling
+   - Null safety
 
-4. Testing Strategy:
-   Requirements:
-   - Write tests before implementation
+3. Tweet Processing:
+   - Entity handling
+   - Reference resolution
+   - Metric calculations
+   - Type-safe transformations
+
+4. Data Processing:
+   - File system operations
+   - Analytics generation
+   - Fine-tuning data preparation
+   - Directory management
+
+5. CLI Interface:
+   - Command handling
+   - Input validation
+   - Error reporting
+   - User feedback
+
+### File Organization
+- TypeScript implementations live in a `typescript` subdirectory
+- Original JavaScript files remain in their current location
+- Tests import from the typescript directory
+- This structure ensures:
+  - Clear separation between JS and TS code
+  - No naming conflicts during migration
+  - Easy path to eventual replacement
+  - Clear migration boundaries
+
+### Migration Process
+1. Define interfaces before implementation
+2. Write comprehensive tests following TDD
+3. Implement type-safe code
+4. Validate existing functionality
+5. Keep TypeScript implementations separate from JavaScript
+6. Never modify JavaScript files - they are the source of truth
+
+### Testing Strategy
+1. Core Requirements:
+   - Write tests before implementation (TDD)
    - Co-locate tests with source code in `__tests__` directories
    - TypeScript tests import only from TypeScript files
    - JavaScript tests remain untouched
    - Mock external dependencies
    - Test error cases and edge conditions
 
-   Implementation Details:
-   - Write tests before implementation (TDD)
-   - Test both TypeScript and JavaScript files during migration
-   - TypeScript tests should only import from TypeScript files
-   - JavaScript tests should remain untouched
-   - Use Vitest for TypeScript-aware testing
-   - Mock external dependencies and side effects
+2. Quality Standards:
    - Maintain high test coverage
-   - Test error cases and edge conditions
    - Validate type safety in tests
-   - Use proper type assertions in test code
+   - Use proper type assertions
    - Test both success and failure paths
+   - Mock external dependencies and side effects
+   - Verify error handling
 
 ### Phase 3: Validation and Cleanup
 
@@ -248,28 +267,52 @@ async function fetchUserTimeline(
 ### Data Processing Patterns
 
 ```typescript
-// Example of a processor class
-class DataProcessor<T, U> {
-  constructor(private readonly schema: z.ZodSchema<T>) {}
+// Example of analytics generation
+interface Analytics {
+  totalTweets: number;
+  engagement: {
+    totalLikes: number;
+    totalRetweetCount: number;
+    averageLikes: string;
+    topTweets: Array<{
+      id: string;
+      text: string;
+      likes: number;
+    }>;
+  };
+  timeRange: {
+    start: string;
+    end: string;
+  };
+}
 
-  async process(raw: unknown): Promise<U> {
-    // Validate input
-    const validated = this.schema.parse(raw);
-
-    // Transform data
-    const processed = this.transform(validated);
-
-    // Validate output
-    return this.validateOutput(processed);
+class DataProcessor {
+  /**
+   * Processes tweets and generates analytics.
+   *
+   * @param tweets - Array of tweets to process
+   * @returns Analytics object with engagement metrics
+   *
+   * @example
+   * ```typescript
+   * const processor = new DataProcessor(baseDir, username);
+   * const analytics = await processor.generateAnalytics(tweets);
+   * ```
+   */
+  generateAnalytics(tweets: Tweet[]): Analytics {
+    // Implementation
   }
 
-  protected transform(data: T): U {
-    throw new Error('Not implemented');
-  }
-
-  private validateOutput(data: U): U {
-    // Implement output validation
-    return data;
+  /**
+   * Saves tweets and generates required files.
+   *
+   * @param tweets - Array of tweets to save
+   * @returns Analytics for the saved tweets
+   * @throws {ValidationError} When tweet data is invalid
+   * @throws {FileSystemError} When file operations fail
+   */
+  async saveTweets(tweets: Tweet[]): Promise<Analytics> {
+    // Implementation
   }
 }
 ```
@@ -299,35 +342,5 @@ class DataProcessor<T, U> {
    - Type safety must be verified
    - Integration points must be tested
 
-## Current Progress
-
-- ✅ TypeScript configuration
-- ✅ ESLint setup with flat config
-- ✅ Core type definitions
-- ✅ Error handling utilities
-- ✅ Initial test infrastructure
-- ✅ Logger module migration
-- 🔄 Twitter API types
-- ✅ Tweet processing
-- 🔄 Data processing utilities
-- ⏳ CLI interfaces
-
-## Next Steps
-
-1. Twitter API Types:
-   - Define request/response types
-   - Add Zod validation
-   - Implement error handling
-   - Test coverage
-
-2. Data Processing:
-   - Type-safe transformations
-   - Validation pipelines
-   - Error boundary handling
-   - Comprehensive testing
-
-3. CLI Interfaces:
-   - Type-safe command handling
-   - Input validation
-   - Error reporting
-   - User feedback
+## Migration Status
+For current implementation status, test coverage metrics, and next actions, refer to `typescript-migration-progress.md`.
