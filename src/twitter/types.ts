@@ -1,4 +1,3 @@
-import type { Ora } from 'ora';
 import { z } from 'zod';
 
 // Twitter API Response Types
