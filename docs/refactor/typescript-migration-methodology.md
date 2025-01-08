@@ -389,3 +389,106 @@ class DataProcessor {
 
 ## Migration Status
 For current implementation status, test coverage metrics, and next actions, refer to `typescript-migration-progress.md`.
+
+## CLI Implementation Patterns
+
+### Command Line Interface Design
+```typescript
+// Use enums for command line options
+enum CollectionMode {
+  Timeline = 'timeline',
+  Search = 'search',
+  List = 'list',
+  Likes = 'likes',
+  Bookmarks = 'bookmarks'
+}
+
+// Define clear interfaces for options
+interface CLIOptions {
+  mode: CollectionMode;
+  username: string;
+  limit?: number;
+}
+
+class CLI {
+  // Use private fields with proper types
+  private collectionMode: CollectionMode;
+  private username: string;
+  private limit: number;
+
+  // Provide type-safe getters
+  getCollectionMode(): CollectionMode {
+    return this.collectionMode;
+  }
+
+  // Validate arguments with proper error handling
+  private validateMode(mode: string): CollectionMode {
+    if (!Object.values(CollectionMode).includes(mode as CollectionMode)) {
+      throw new Error(`Invalid collection mode: ${mode}`);
+    }
+    return mode as CollectionMode;
+  }
+
+  // Handle interactive mode gracefully
+  private async promptForMode(): Promise<CollectionMode> {
+    const response = await inquirer.prompt([{
+      type: 'list',
+      name: 'mode',
+      message: 'Please select a collection mode:',
+      choices: Object.values(CollectionMode)
+    }]);
+    return response.mode;
+  }
+}
+```
+
+### Error Handling
+```typescript
+// Environment validation
+async validateEnvironment(): Promise<void> {
+  const required = ['TWITTER_USERNAME', 'TWITTER_PASSWORD'];
+  const missing = required.filter(var_ => !process.env[var_]);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
+// Graceful cleanup
+async cleanup(): Promise<void> {
+  try {
+    await this.pipeline.cleanup();
+    Logger.success('Logged out successfully');
+  } catch (error) {
+    Logger.error(`Cleanup failed: ${error.message}`);
+  }
+}
+```
+
+### Testing Strategy
+```typescript
+// Mock external dependencies
+vi.mock('inquirer', () => ({
+  default: {
+    prompt: vi.fn().mockResolvedValue({})
+  }
+}));
+
+// Test command line arguments
+it('should handle command line args', async () => {
+  process.argv = ['node', 'script.js', '--mode', 'timeline'];
+  const cli = new CLI();
+  await cli.processArgs();
+  expect(cli.getMode()).toBe(CollectionMode.Timeline);
+});
+
+// Test interactive mode
+it('should prompt when args missing', async () => {
+  vi.mocked(inquirer.prompt).mockResolvedValueOnce({
+    mode: CollectionMode.Timeline
+  });
+  const cli = new CLI();
+  await cli.processArgs();
+  expect(inquirer.prompt).toHaveBeenCalled();
+});
+```
