@@ -121,6 +121,60 @@ describe('TwitterPipeline', () => {
       // Verify TweetProcessor was used
       expect(mockProcessTweet).toHaveBeenCalledWith(mockTweet);
     });
+
+    it('should handle empty tweet responses', async () => {
+      const mockScraper = {
+        getTweets: vi.fn().mockImplementation(async function* () {
+          // yield nothing
+        }),
+      };
+
+      const tweets = await pipeline.collectTweets(mockScraper as any);
+      expect(tweets).toHaveLength(0);
+    });
+
+    it('should stop after reaching maxTweets', async () => {
+      // Override maxTweets to a small number for faster testing
+      pipeline['config'].twitter.maxTweets = 2;
+
+      const mockTweet: Tweet = {
+        id_str: '123',
+        text: 'test tweet',
+        created_at: '2023-01-01T00:00:00.000Z',
+        user: {
+          id_str: 'user123',
+          screen_name: 'testuser',
+          name: 'Test User',
+          description: null,
+          followers_count: 100,
+          friends_count: 100,
+          verified: false,
+        },
+        retweet_count: 0,
+        favorite_count: 0,
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [],
+        },
+        in_reply_to_status_id_str: null,
+        in_reply_to_user_id_str: null,
+        quoted_status_id_str: null,
+        retweeted_status_id_str: null,
+      };
+
+      const mockScraper = {
+        getTweets: vi.fn().mockImplementation(async function* () {
+          for (let i = 0; i < 5; i++) { // Try to yield more than maxTweets
+            yield { ...mockTweet, id_str: `${i}` };
+          }
+        }),
+      };
+
+      const tweets = await pipeline.collectTweets(mockScraper as any);
+      expect(tweets).toHaveLength(2); // Should stop at maxTweets
+      expect(mockScraper.getTweets).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('initialization', () => {
@@ -132,6 +186,14 @@ describe('TwitterPipeline', () => {
       expect(pipeline['config']).toBeDefined();
       expect(pipeline['config'].twitter.maxTweets).toBeGreaterThan(0);
     });
+
+    it('should use environment variables for configuration', () => {
+      process.env.MAX_TWEETS = '1000';
+      process.env.MAX_RETRIES = '3';
+      const configuredPipeline = new TwitterPipeline('testuser');
+      expect(configuredPipeline['config'].twitter.maxTweets).toBe(1000);
+      expect(configuredPipeline['config'].twitter.maxRetries).toBe(3);
+    });
   });
 
   describe('error handling', () => {
@@ -141,6 +203,59 @@ describe('TwitterPipeline', () => {
       };
 
       const result = await pipeline.collectTweets(mockScraper as any);
+      expect(result).toEqual([]);
+    });
+
+    it('should retry on rate limit before giving up', async () => {
+      // Set a low rate limit threshold
+      pipeline['config'].twitter.rateLimitThreshold = 2;
+
+      const mockTweet: Tweet = {
+        id_str: '123',
+        text: 'test tweet',
+        created_at: '2023-01-01T00:00:00.000Z',
+        user: {
+          id_str: 'user123',
+          screen_name: 'testuser',
+          name: 'Test User',
+          description: null,
+          followers_count: 100,
+          friends_count: 100,
+          verified: false,
+        },
+        retweet_count: 0,
+        favorite_count: 0,
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [],
+        },
+        in_reply_to_status_id_str: null,
+        in_reply_to_user_id_str: null,
+        quoted_status_id_str: null,
+        retweeted_status_id_str: null,
+      };
+
+      const mockScraper = {
+        getTweets: vi.fn()
+          .mockRejectedValueOnce(new Error('Rate limit exceeded'))
+          .mockRejectedValueOnce(new Error('Rate limit exceeded')),
+      };
+
+      await pipeline.collectTweets(mockScraper as any);
+      expect(mockScraper.getTweets).toHaveBeenCalledTimes(2);
+      expect(mockProcessTweet).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('fallback mode', () => {
+    it('should throw error when fallback is disabled', async () => {
+      pipeline['config'].fallback.enabled = false;
+      await expect(pipeline.collectWithFallback('query')).rejects.toThrow('Fallback mode is disabled');
+    });
+
+    it('should handle fallback collection errors', async () => {
+      const result = await pipeline.collectWithFallback('query');
       expect(result).toEqual([]);
     });
   });

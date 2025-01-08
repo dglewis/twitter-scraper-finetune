@@ -115,6 +115,9 @@ export class TwitterPipeline {
         const response = await scraper.getTweets(this.username, nextToken ? parseInt(nextToken) : undefined);
         const responseTweets: Tweet[] = [];
         for await (const tweet of response) {
+          if (tweets.length >= this.config.twitter.maxTweets) {
+            break;
+          }
           const typedTweet = tweet as unknown as Tweet;
           if (TweetFilter.isValid(typedTweet)) {
             responseTweets.push(typedTweet);
@@ -157,7 +160,10 @@ export class TwitterPipeline {
           await this.dataProcessor.saveNextToken(nextToken);
         }
 
-        tweets.push(...newTweets);
+        tweets.push(...newTweets.slice(0, this.config.twitter.maxTweets - tweets.length));
+        if (tweets.length >= this.config.twitter.maxTweets) {
+          break;
+        }
         rateLimitRetries = 0;
 
       } catch (error) {
