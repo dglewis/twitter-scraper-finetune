@@ -102,3 +102,7 @@ Current test suite status (snapshot as of last update):
 - Implementing proper TypeScript interfaces before code migration
 - Standardizing tweet processing with ProcessedTweet interface
 - Using static classes for utility functions like TweetFilter
+- Moving all TypeScript implementations to a dedicated typescript directory
+  - Ensures clear separation from JavaScript files
+  - Avoids naming conflicts during migration
+  - Provides clear migration boundaries

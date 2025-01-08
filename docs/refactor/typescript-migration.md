@@ -91,7 +91,17 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - 🔄 Data processing utilities (in progress)
    - ⏳ CLI interfaces
 
-2. Migration Strategy:
+2. File Organization:
+   - TypeScript implementations live in a `typescript` subdirectory
+   - Original JavaScript files remain in their current location
+   - Tests import from the typescript directory
+   - This structure ensures:
+     - Clear separation between JS and TS code
+     - No naming conflicts during migration
+     - Easy path to eventual replacement
+     - Clear migration boundaries
+
+3. Migration Strategy:
    - Define interfaces before implementation
    - Write comprehensive tests
    - Implement type-safe code
@@ -102,7 +112,7 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - Don't try to make TypeScript code import from or depend on JavaScript files
    - Let the JavaScript implementation continue serving production until TypeScript migration is complete
 
-3. Testing Strategy:
+4. Testing Strategy:
    Requirements:
    - Write tests before implementation
    - Co-locate tests with source code in `__tests__` directories
