@@ -216,8 +216,8 @@ export class DataProcessor {
           })),
       },
       timeRange: {
-        start: dates.length > 0 ? format(dates[0], 'yyyy-MM-dd') : 'N/A',
-        end: dates.length > 0 ? format(dates[dates.length - 1], 'yyyy-MM-dd') : 'N/A',
+        start: dates.length > 0 ? format(dates[0]!, 'yyyy-MM-dd') : 'N/A',
+        end: dates.length > 0 ? format(dates[dates.length - 1]!, 'yyyy-MM-dd') : 'N/A',
       },
       contentTypes: {
         withImages: 0, // Media entities not in basic Tweet type
