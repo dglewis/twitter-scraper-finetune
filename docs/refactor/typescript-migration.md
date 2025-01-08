@@ -144,6 +144,8 @@ The migration order and current status are tracked in `typescript-migration-prog
    - JavaScript tests remain untouched
    - Mock external dependencies
    - Test error cases and edge conditions
+   - Optimize test execution speed
+   - Use type assertions strategically for complex mocks
 
 2. Quality Standards:
    - Maintain high test coverage
@@ -152,6 +154,49 @@ The migration order and current status are tracked in `typescript-migration-prog
    - Test both success and failure paths
    - Mock external dependencies and side effects
    - Verify error handling
+   - Keep tests fast and focused
+   - Avoid unnecessary test complexity
+
+3. Test Performance:
+   - Keep individual test execution under 500ms
+   - Use small data sets for testing
+   - Mock time-consuming operations
+   - Avoid infinite loops in tests
+   - Use proper test isolation
+   - Clean up resources after tests
+   - Reset mocks between tests
+   - Current metrics:
+     - Full suite execution: ~5.5s
+     - Individual test files: <2s
+     - Transform overhead: ~1.3s
+     - Collection overhead: ~16s
+     - Setup overhead: ~2.5s
+
+4. Test Organization:
+   - Co-locate tests with source code
+   - Group related tests in describe blocks
+   - Use clear test descriptions
+   - Current structure:
+     - Logger tests (12)
+     - Types tests (6)
+     - Error utilities (3)
+     - Tweet processing (4)
+     - Tweet filtering (12)
+     - Schema validation (6)
+     - Data processing (10)
+     - Twitter pipeline (9)
+     - CLI interface (13)
+     - Structure tests (2)
+     - Total: 77 tests
+
+4. Mocking Strategy:
+   - Use vi.mock for module-level mocks
+   - Use vi.fn for individual function mocks
+   - Mock external dependencies consistently
+   - Use type assertions for complex mock objects
+   - Maintain type safety in mocks
+   - Reset mocks in beforeEach hooks
+   - Verify mock calls and arguments
 
 ### Phase 3: Validation and Cleanup
 
