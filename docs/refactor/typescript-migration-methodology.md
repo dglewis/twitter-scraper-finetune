@@ -29,6 +29,10 @@ Implementation progress and current metrics are tracked separately in `typescrip
     - [Data Processing Patterns](#data-processing-patterns)
     - [Test Coverage Requirements](#test-coverage-requirements)
   - [Migration Status](#migration-status)
+  - [CLI Implementation Patterns](#cli-implementation-patterns)
+    - [Command Line Interface Design](#command-line-interface-design)
+    - [Error Handling](#error-handling)
+    - [Testing Strategy](#testing-strategy-1)
 
 ## Prerequisites (Completed)
 
@@ -166,30 +170,63 @@ The migration order and current status are tracked in `typescript-migration-prog
    - Clean up resources after tests
    - Reset mocks between tests
    - Current metrics:
-     - Full suite execution: ~5.5s
-     - Individual test files: <2s
-     - Transform overhead: ~1.3s
-     - Collection overhead: ~16s
-     - Setup overhead: ~2.5s
+     - Full suite execution: 7.13s
+     - Transform time: 1.38s
+     - Collection time: 21.86s
+     - Test execution time: 1.81s
+     - Setup time: ~3.33s
+     - Environment time: 9ms
 
 4. Test Organization:
    - Co-locate tests with source code
    - Group related tests in describe blocks
    - Use clear test descriptions
    - Current structure:
+     - CLI Interface tests (20)
+     - Integration tests (4)
+     - Twitter Pipeline tests (9)
+     - Tweet Filter tests (12)
+     - Data Processor tests (10)
+     - Tweet Processor tests (4)
      - Logger tests (12)
-     - Types tests (6)
-     - Error utilities (3)
-     - Tweet processing (4)
-     - Tweet filtering (12)
-     - Schema validation (6)
-     - Data processing (10)
-     - Twitter pipeline (9)
-     - CLI interface (13)
      - Structure tests (2)
-     - Total: 77 tests
+     - Types tests (6)
+     - Schema tests (6)
+     - Error Utilities tests (3)
+     - Total: 88 tests
 
-4. Mocking Strategy:
+5. Integration Testing Strategy:
+   - End-to-end workflow validation
+     - Verify complete pipeline execution
+     - Test data flow between components
+     - Validate file system operations
+     - Check analytics generation
+
+   - Error Handling Verification
+     - Test collection failures
+     - Verify error propagation
+     - Validate cleanup procedures
+     - Check error logging
+
+   - Rate Limit Handling
+     - Test automatic fallback detection
+     - Verify mode switching
+     - Validate recovery process
+     - Check warning messages
+
+   - Collection Modes
+     - Test all supported modes
+     - Verify mode-specific behavior
+     - Test command line arguments
+     - Validate mode switching
+
+   - Mock Strategy
+     - Use consistent mock implementations
+     - Maintain type safety in mocks
+     - Mock external dependencies
+     - Reset state between tests
+
+6. Mocking Strategy:
    - Use vi.mock for module-level mocks
    - Use vi.fn for individual function mocks
    - Mock external dependencies consistently
@@ -415,6 +452,7 @@ class CLI {
   private collectionMode: CollectionMode;
   private username: string;
   private limit: number;
+  private initialized: boolean = false;
 
   // Provide type-safe getters
   getCollectionMode(): CollectionMode {
@@ -439,6 +477,15 @@ class CLI {
     }]);
     return response.mode;
   }
+
+  // Ensure proper initialization
+  async initialize(): Promise<void> {
+    if (!this.initialized) {
+      await this.validateEnvironment();
+      await this.processArgs();
+      this.initialized = true;
+    }
+  }
 }
 ```
 
@@ -446,49 +493,121 @@ class CLI {
 ```typescript
 // Environment validation
 async validateEnvironment(): Promise<void> {
+  Logger.startSpinner('Validating environment');
   const required = ['TWITTER_USERNAME', 'TWITTER_PASSWORD'];
   const missing = required.filter(var_ => !process.env[var_]);
 
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    Logger.stopSpinner(false);
+    Logger.error('Missing required environment variables:');
+    missing.forEach(var_ => Logger.error(`- ${var_}`));
+    process.exit(1);
+  }
+  Logger.stopSpinner();
+}
+
+// Pipeline error handling
+async run(): Promise<void> {
+  try {
+    await this.initialize();
+    try {
+      await this.pipeline.run();
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
+        Logger.warn('Rate limit exceeded. Attempting fallback collection...');
+        Logger.info('Attempting fallback collection mode...');
+        await this.pipeline.collectWithFallback(this.username);
+      } else {
+        Logger.error(`Collection failed: ${error instanceof Error ? error.message : String(error)}`);
+        process.exit(1);
+      }
+    }
+  } catch (error) {
+    Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
   }
 }
 
 // Graceful cleanup
 async cleanup(): Promise<void> {
+  Logger.warn('\n🛑 Received termination signal. Cleaning up...');
   try {
     await this.pipeline.cleanup();
-    Logger.success('Logged out successfully');
+    Logger.success('🔒 Logged out successfully.');
   } catch (error) {
-    Logger.error(`Cleanup failed: ${error.message}`);
+    Logger.error(`❌ Error during cleanup: ${error instanceof Error ? error.message : String(error)}`);
   }
+  process.exit(0);
 }
 ```
 
 ### Testing Strategy
 ```typescript
 // Mock external dependencies
-vi.mock('inquirer', () => ({
-  default: {
-    prompt: vi.fn().mockResolvedValue({})
-  }
-}));
+vi.mock('../typescript/TwitterPipeline');
+vi.mock('../typescript/DataProcessor');
+vi.mock('../typescript/Logger');
+vi.mock('fs');
 
-// Test command line arguments
-it('should handle command line args', async () => {
-  process.argv = ['node', 'script.js', '--mode', 'timeline'];
-  const cli = new CLI();
-  await cli.processArgs();
-  expect(cli.getMode()).toBe(CollectionMode.Timeline);
+// Setup test environment
+beforeEach(() => {
+  // Save original environment
+  originalEnv = process.env;
+  process.env = { ...originalEnv };
+
+  // Mock process.exit
+  originalProcessExit = process.exit;
+  exitMock = vi.fn();
+  process.exit = exitMock as any;
+
+  // Setup environment variables
+  process.env.TWITTER_USERNAME = 'testuser';
+  process.env.TWITTER_PASSWORD = 'testpass';
 });
 
-// Test interactive mode
-it('should prompt when args missing', async () => {
-  vi.mocked(inquirer.prompt).mockResolvedValueOnce({
-    mode: CollectionMode.Timeline
-  });
-  const cli = new CLI();
-  await cli.processArgs();
-  expect(inquirer.prompt).toHaveBeenCalled();
+// Test successful workflow
+it('should successfully collect and process tweets', async () => {
+  // Mock pipeline implementation
+  const mockPipeline = {
+    run: vi.fn().mockImplementation(async () => {
+      const dataProcessor = new DataProcessor('testuser', '/test/data');
+      await dataProcessor.saveTweets([mockTweet]);
+      return [mockTweet];
+    }),
+    cleanup: vi.fn().mockResolvedValue(undefined),
+    collectWithFallback: vi.fn().mockResolvedValue([mockTweet]),
+  };
+
+  vi.mocked(TwitterPipeline).mockImplementation(() => mockPipeline as unknown as TwitterPipeline);
+
+  // Run CLI
+  await cli.run();
+
+  // Verify behavior
+  expect(mockPipeline.run).toHaveBeenCalled();
+  expect(fs.writeFile).toHaveBeenCalledWith(
+    expect.stringContaining('tweets.json'),
+    expect.any(String),
+    'utf-8'
+  );
+});
+
+// Test error handling
+it('should handle collection errors gracefully', async () => {
+  // Mock error scenario
+  const mockPipeline = {
+    run: vi.fn().mockRejectedValue(new Error('Collection failed')),
+    cleanup: vi.fn().mockResolvedValue(undefined),
+    collectWithFallback: vi.fn().mockResolvedValue([]),
+  };
+
+  vi.mocked(TwitterPipeline).mockImplementation(() => mockPipeline as unknown as TwitterPipeline);
+
+  // Run CLI
+  await cli.run();
+
+  // Verify error handling
+  expect(exitMock).toHaveBeenCalledWith(1);
+  expect(Logger.error).toHaveBeenCalledWith(expect.stringContaining('Collection failed'));
 });
 ```

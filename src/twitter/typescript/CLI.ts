@@ -1,17 +1,17 @@
 import Logger from './Logger';
-import { TwitterPipeline } from '.';
+import { TwitterPipeline } from './TwitterPipeline';
 import { CollectionMode } from './types';
 import inquirer from 'inquirer';
 
 export class CLI {
-  private pipeline: TwitterPipeline;
+  private pipeline!: TwitterPipeline;
   private collectionMode: CollectionMode = CollectionMode.Timeline;
-  private username: string;
+  private username!: string;
   private limit: number = 1000;
+  private initialized: boolean = false;
 
-  constructor(username: string = 'degenspartan') {
-    this.username = username;
-    this.pipeline = new TwitterPipeline(username);
+  constructor() {
+    // Pipeline will be initialized after processing arguments
   }
 
   setupErrorHandlers(): void {
@@ -49,7 +49,7 @@ export class CLI {
   async cleanup(): Promise<void> {
     Logger.warn('\n🛑 Received termination signal. Cleaning up...');
     try {
-      await this.pipeline.cleanup();
+      await this.pipeline?.cleanup();
       Logger.success('🔒 Logged out successfully.');
     } catch (error) {
       Logger.error(`❌ Error during cleanup: ${error instanceof Error ? error.message : String(error)}`);
@@ -121,10 +121,18 @@ export class CLI {
         type: 'input',
         name: 'username',
         message: 'Please enter a username:',
-        default: this.username
+        default: 'degenspartan'
       }]);
       this.username = response.username;
     }
+
+    // Initialize pipeline with the correct username and limit
+    this.pipeline = new TwitterPipeline(this.username, {
+      maxTweets: this.limit
+    });
+
+    // Log the selected mode
+    Logger.info(`Collection mode: ${this.collectionMode}`);
   }
 
   getCollectionMode(): CollectionMode {
@@ -139,12 +147,32 @@ export class CLI {
     return this.limit;
   }
 
-  async run(): Promise<void> {
-    try {
+  async initialize(): Promise<void> {
+    if (!this.initialized) {
       await this.validateEnvironment();
       await this.processArgs();
-      await this.pipeline.run();
+      this.initialized = true;
+    }
+  }
+
+  async run(): Promise<void> {
+    try {
+      await this.initialize();
+
+      try {
+        await this.pipeline.run();
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('Rate limit exceeded')) {
+          Logger.warn('Rate limit exceeded. Attempting fallback collection...');
+          Logger.info('Attempting fallback collection mode...');
+          await this.pipeline.collectWithFallback(this.username);
+        } else {
+          Logger.error(`Collection failed: ${error instanceof Error ? error.message : String(error)}`);
+          process.exit(1);
+        }
+      }
     } catch (error) {
+      Logger.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   }

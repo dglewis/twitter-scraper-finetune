@@ -56,6 +56,7 @@ export class DataProcessor {
       username.toLowerCase(),
       format(new Date(), 'yyyy-MM-dd')
     );
+    this.createDirectories();
   }
 
   async createDirectories(): Promise<void> {

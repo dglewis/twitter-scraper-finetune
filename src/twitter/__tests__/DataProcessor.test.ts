@@ -36,6 +36,23 @@ describe('DataProcessor', () => {
       });
     });
 
+    it('should use constructor username for directory path, not default', async () => {
+      const customUsername = 'customuser';
+      const processor = new DataProcessor(baseDir, customUsername);
+      await processor.createDirectories();
+
+      // Verify all directory creations use the custom username
+      expect(fs.mkdir).toHaveBeenCalledWith(
+        expect.stringContaining(`/${customUsername.toLowerCase()}/`),
+        expect.any(Object)
+      );
+      // Verify no directories are created with default username
+      expect(fs.mkdir).not.toHaveBeenCalledWith(
+        expect.stringContaining('/degenspartan/'),
+        expect.any(Object)
+      );
+    });
+
     it('should handle directory creation errors gracefully', async () => {
       vi.mocked(fs.mkdir).mockRejectedValueOnce(new Error('Permission denied'));
 

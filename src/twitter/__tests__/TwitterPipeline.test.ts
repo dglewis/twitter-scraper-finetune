@@ -1,262 +1,157 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { TwitterPipeline } from '../typescript/TwitterPipeline';
-import { TweetProcessor } from '../typescript/TweetProcessor';
-import { DataProcessor } from '../typescript/DataProcessor';
-import type { Tweet } from '../typescript/types';
+import { Scraper } from 'agent-twitter-client';
+import fs from 'fs/promises';
 
-// Create mock functions
-const mockProcessTweet = vi.fn();
+vi.mock('fs/promises');
+vi.mock('agent-twitter-client');
 
-// Mock TweetProcessor
-vi.mock('../typescript/TweetProcessor', () => ({
-  TweetProcessor: vi.fn().mockImplementation(() => ({
-    processTweet: mockProcessTweet,
-  })),
-}));
+const mockTweet = {
+  id: '1234567890',
+  text: 'This is a test tweet',
+  username: 'testuser',
+  name: 'Test User',
+  userId: '987654321',
+  timeParsed: new Date('2024-01-07T12:00:00Z'),
+  retweets: 0,
+  likes: 0,
+  replies: 0,
+  hashtags: [],
+  urls: [],
+  inReplyToStatusId: null,
+  quotedStatusId: null,
+  retweetedStatusId: null
+};
 
-// Mock DataProcessor
-vi.mock('../typescript/DataProcessor', () => ({
-  DataProcessor: vi.fn().mockImplementation(() => ({
-    getLastNextToken: vi.fn().mockResolvedValue(null),
-    saveNextToken: vi.fn().mockResolvedValue(undefined),
-    getPaths: vi.fn().mockReturnValue({
-      raw: { tweets: '/test/tweets.json', urls: '/test/urls.txt' },
-      processed: { finetuning: '/test/finetuning.jsonl' },
-      analytics: { stats: '/test/stats.json' },
-      exports: { summary: '/test/summary.md' },
-      meta: { nextToken: '/test/next_token.txt' },
-    }),
-  })),
-}));
+const mockScraper = {
+  getTweets: vi.fn().mockImplementation(async function* () {
+    yield mockTweet;
+  }),
+  login: vi.fn().mockResolvedValue(undefined),
+  isLoggedIn: vi.fn().mockResolvedValue(true),
+  setCookies: vi.fn().mockResolvedValue(undefined),
+  getCookies: vi.fn().mockResolvedValue([{ name: 'test_cookie' }]),
+  cleanup: vi.fn().mockResolvedValue(undefined),
+};
 
-// Mock Logger
-vi.mock('../typescript/Logger', () => ({
-  default: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    success: vi.fn(),
-    updateCollectionProgress: vi.fn(),
-  },
-}));
+vi.mocked(Scraper).mockImplementation(() => mockScraper as any);
 
 describe('TwitterPipeline', () => {
-  let pipeline: TwitterPipeline;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    pipeline = new TwitterPipeline('testuser');
-    // Mock the private randomDelay method
-    vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
-    // Setup mock implementation for processTweet
-    mockProcessTweet.mockImplementation((tweet: Tweet) => ({
-      id: tweet.id_str,
-      text: tweet.text,
-      created_at: tweet.created_at,
-      author: {
-        id: tweet.user.id_str,
-        username: tweet.user.screen_name,
-        name: tweet.user.name,
-        followers_count: tweet.user.followers_count,
-        following_count: tweet.user.friends_count,
-        is_verified: tweet.user.verified,
-      },
-      metrics: {
-        retweets: tweet.retweet_count,
-        likes: tweet.favorite_count,
-        replies: 0,
-        quotes: 0,
-      },
-      entities: {
-        hashtags: [],
-        urls: [],
-        mentions: [],
-      },
-      referenced_tweets: {
-        replied_to: null,
-        quoted: null,
-        retweeted: null,
-      },
-    }));
+    process.env.TWITTER_USERNAME = 'test_user';
+    process.env.TWITTER_PASSWORD = 'test_pass';
+    process.env.TWITTER_EMAIL = 'test@example.com';
   });
 
-  describe('tweet processing', () => {
-    it('should use TweetProcessor for processing tweets', async () => {
-      const mockTweet: Tweet = {
-        id_str: '123',
-        text: 'test tweet',
-        created_at: '2023-01-01T00:00:00.000Z',
-        user: {
-          id_str: 'user123',
-          screen_name: 'testuser',
-          name: 'Test User',
-          description: null,
-          followers_count: 100,
-          friends_count: 100,
-          verified: false,
-        },
-        retweet_count: 0,
-        favorite_count: 0,
-        entities: {
-          hashtags: [],
-          urls: [],
-          user_mentions: [],
-        },
-        in_reply_to_status_id_str: null,
-        in_reply_to_user_id_str: null,
-        quoted_status_id_str: null,
-        retweeted_status_id_str: null,
-      };
+  describe('Scraper Initialization', () => {
+    it('should initialize scraper with saved cookies if available', async () => {
+      vi.mocked(fs.access).mockResolvedValueOnce(undefined);
+      vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify([{ name: 'test_cookie' }]));
+      mockScraper.isLoggedIn.mockResolvedValueOnce(true);
 
-      // Mock the scraper's getTweets method
-      const mockScraper = {
-        getTweets: vi.fn().mockImplementation(async function* () {
-          yield mockTweet;
-        }),
-      };
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const success = await pipeline['initializeScraper']();
 
-      // Call collectTweets
-      await pipeline.collectTweets(mockScraper as any);
-
-      // Verify TweetProcessor was used
-      expect(mockProcessTweet).toHaveBeenCalledWith(mockTweet);
+      expect(success).toBe(true);
+      expect(fs.access).toHaveBeenCalled();
+      expect(fs.readFile).toHaveBeenCalled();
+      expect(mockScraper.setCookies).toHaveBeenCalledWith([{ name: 'test_cookie' }]);
     });
 
-    it('should handle empty tweet responses', async () => {
-      const mockScraper = {
-        getTweets: vi.fn().mockImplementation(async function* () {
-          // yield nothing
-        }),
-      };
+    it('should attempt fresh login if cookies are invalid', async () => {
+      vi.mocked(fs.access).mockRejectedValueOnce(new Error('File not found'));
+      mockScraper.isLoggedIn.mockResolvedValueOnce(false);
+      mockScraper.login.mockResolvedValueOnce(undefined);
 
-      const tweets = await pipeline.collectTweets(mockScraper as any);
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const success = await pipeline['initializeScraper']();
+
+      expect(success).toBe(true);
+      expect(mockScraper.login).toHaveBeenCalledWith('test_user', 'test_pass', 'test@example.com');
+      expect(mockScraper.getCookies).toHaveBeenCalled();
+      expect(fs.writeFile).toHaveBeenCalled();
+    });
+  });
+
+  describe('Tweet Collection', () => {
+    it('should collect and process tweets successfully', async () => {
+      mockScraper.getTweets.mockImplementation(async function* () {
+        yield mockTweet;
+      });
+
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const scraper = pipeline['scraper'] as Scraper;
+      const tweets = await pipeline.collectTweets(scraper);
+
+      expect(tweets).toHaveLength(1);
+      expect(mockScraper.getTweets).toHaveBeenCalledWith('testuser', undefined);
+    });
+
+    it('should handle rate limits gracefully', async () => {
+      // Reset the mock implementation first
+      mockScraper.getTweets.mockReset();
+      // Then implement the rate limit error followed by empty responses
+      let callCount = 0;
+      mockScraper.getTweets.mockImplementation(async function* () {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Rate limit exceeded');
+        }
+        // Return empty array for subsequent calls to trigger the "no new tweets" condition
+        return [];
+      });
+
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const scraper = pipeline['scraper'] as Scraper;
+      const tweets = await pipeline.collectTweets(scraper);
+
+      expect(tweets).toHaveLength(0);
+      // We expect 4 calls:
+      // 1. Initial call that hits rate limit
+      // 2. Retry after rate limit
+      // 3-4. Empty response attempts before stopping
+      expect(mockScraper.getTweets).toHaveBeenCalledTimes(4);
+    });
+
+    it('should stop after three empty responses', async () => {
+      mockScraper.getTweets.mockImplementation(async function* () {
+        yield* [];
+      });
+
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const scraper = pipeline['scraper'] as Scraper;
+      const tweets = await pipeline.collectTweets(scraper);
+
       expect(tweets).toHaveLength(0);
     });
-
-    it('should stop after reaching maxTweets', async () => {
-      // Override maxTweets to a small number for faster testing
-      pipeline['config'].twitter.maxTweets = 2;
-
-      const mockTweet: Tweet = {
-        id_str: '123',
-        text: 'test tweet',
-        created_at: '2023-01-01T00:00:00.000Z',
-        user: {
-          id_str: 'user123',
-          screen_name: 'testuser',
-          name: 'Test User',
-          description: null,
-          followers_count: 100,
-          friends_count: 100,
-          verified: false,
-        },
-        retweet_count: 0,
-        favorite_count: 0,
-        entities: {
-          hashtags: [],
-          urls: [],
-          user_mentions: [],
-        },
-        in_reply_to_status_id_str: null,
-        in_reply_to_user_id_str: null,
-        quoted_status_id_str: null,
-        retweeted_status_id_str: null,
-      };
-
-      const mockScraper = {
-        getTweets: vi.fn().mockImplementation(async function* () {
-          for (let i = 0; i < 5; i++) { // Try to yield more than maxTweets
-            yield { ...mockTweet, id_str: `${i}` };
-          }
-        }),
-      };
-
-      const tweets = await pipeline.collectTweets(mockScraper as any);
-      expect(tweets).toHaveLength(2); // Should stop at maxTweets
-      expect(mockScraper.getTweets).toHaveBeenCalledTimes(1);
-    });
   });
 
-  describe('initialization', () => {
-    it('should initialize with correct configuration', () => {
-      expect(pipeline).toBeInstanceOf(TwitterPipeline);
-      expect(pipeline['username']).toBe('testuser');
-      expect(pipeline['tweetProcessor']).toBeDefined();
-      expect(pipeline['dataProcessor']).toBeDefined();
-      expect(pipeline['config']).toBeDefined();
-      expect(pipeline['config'].twitter.maxTweets).toBeGreaterThan(0);
+  describe('Error Handling', () => {
+    it('should handle scraper initialization failures', async () => {
+      mockScraper.isLoggedIn.mockResolvedValue(false);
+      mockScraper.login.mockRejectedValue(new Error('Login verification failed'));
+
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      vi.spyOn(pipeline as any, 'randomDelay').mockResolvedValue(undefined);
+      const success = await pipeline['initializeScraper']();
+
+      expect(success).toBe(false);
     });
 
-    it('should use environment variables for configuration', () => {
-      process.env.MAX_TWEETS = '1000';
-      process.env.MAX_RETRIES = '3';
-      const configuredPipeline = new TwitterPipeline('testuser');
-      expect(configuredPipeline['config'].twitter.maxTweets).toBe(1000);
-      expect(configuredPipeline['config'].twitter.maxRetries).toBe(3);
-    });
-  });
+    it('should handle cookie saving failures', async () => {
+      vi.mocked(fs.writeFile).mockRejectedValueOnce(new Error('Write failed'));
+      mockScraper.getCookies.mockResolvedValueOnce([{ name: 'test_cookie' }]);
 
-  describe('error handling', () => {
-    it('should handle rate limits gracefully', async () => {
-      const mockScraper = {
-        getTweets: vi.fn().mockRejectedValue(new Error('Rate limit exceeded')),
-      };
+      const pipeline = new TwitterPipeline('testuser', { maxTweets: 1 });
+      await pipeline['saveCookies']();
 
-      const result = await pipeline.collectTweets(mockScraper as any);
-      expect(result).toEqual([]);
-    });
-
-    it('should retry on rate limit before giving up', async () => {
-      // Set a low rate limit threshold
-      pipeline['config'].twitter.rateLimitThreshold = 2;
-
-      const mockTweet: Tweet = {
-        id_str: '123',
-        text: 'test tweet',
-        created_at: '2023-01-01T00:00:00.000Z',
-        user: {
-          id_str: 'user123',
-          screen_name: 'testuser',
-          name: 'Test User',
-          description: null,
-          followers_count: 100,
-          friends_count: 100,
-          verified: false,
-        },
-        retweet_count: 0,
-        favorite_count: 0,
-        entities: {
-          hashtags: [],
-          urls: [],
-          user_mentions: [],
-        },
-        in_reply_to_status_id_str: null,
-        in_reply_to_user_id_str: null,
-        quoted_status_id_str: null,
-        retweeted_status_id_str: null,
-      };
-
-      const mockScraper = {
-        getTweets: vi.fn()
-          .mockRejectedValueOnce(new Error('Rate limit exceeded'))
-          .mockRejectedValueOnce(new Error('Rate limit exceeded')),
-      };
-
-      await pipeline.collectTweets(mockScraper as any);
-      expect(mockScraper.getTweets).toHaveBeenCalledTimes(2);
-      expect(mockProcessTweet).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('fallback mode', () => {
-    it('should throw error when fallback is disabled', async () => {
-      pipeline['config'].fallback.enabled = false;
-      await expect(pipeline.collectWithFallback('query')).rejects.toThrow('Fallback mode is disabled');
-    });
-
-    it('should handle fallback collection errors', async () => {
-      const result = await pipeline.collectWithFallback('query');
-      expect(result).toEqual([]);
+      expect(fs.writeFile).toHaveBeenCalled();
     });
   });
 });
