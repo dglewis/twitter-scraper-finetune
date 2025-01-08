@@ -1,12 +1,28 @@
-import type { Tweet } from './types';
+import type { Tweet, CollectionOptions } from './types';
 
 /**
  * Static class for filtering and validating tweets.
  * This is the TypeScript implementation that will eventually replace the JavaScript version.
  */
 class TweetFilter {
+  private static options: CollectionOptions = {
+    tweetTypes: [],
+    contentTypes: [],
+    filterByEngagement: false,
+    filterByDate: false,
+    excludeKeywords: false
+  };
+
   private constructor() {
     throw new Error('TweetFilter is a static class and cannot be instantiated');
+  }
+
+  static async promptCollectionMode(): Promise<CollectionOptions> {
+    return { ...this.options };
+  }
+
+  static async promptCustomOptions(): Promise<CollectionOptions> {
+    return { ...this.options };
   }
 
   /**

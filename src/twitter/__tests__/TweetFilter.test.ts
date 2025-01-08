@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { TweetFilter } from '../typescript/TweetFilter';
-import type { Tweet } from '../typescript/types';
+import type { Tweet, CollectionOptions } from '../typescript/types';
 
 console.log('Module import:', { TweetFilter });
 
@@ -204,6 +204,65 @@ describe('TweetFilter', () => {
       };
 
       expect(TweetFilter.isValid(mentionOnlyTweet)).toBe(false);
+    });
+  });
+
+  describe('promptCollectionMode', () => {
+    it('should return default collection options', async () => {
+      const options = await TweetFilter.promptCollectionMode();
+      expect(options).toEqual({
+        tweetTypes: [],
+        contentTypes: [],
+        filterByEngagement: false,
+        filterByDate: false,
+        excludeKeywords: false
+      });
+    });
+  });
+
+  describe('promptCustomOptions', () => {
+    it('should return default collection options', async () => {
+      const options = await TweetFilter.promptCustomOptions();
+      expect(options).toEqual({
+        tweetTypes: [],
+        contentTypes: [],
+        filterByEngagement: false,
+        filterByDate: false,
+        excludeKeywords: false
+      });
+    });
+  });
+
+  describe('collection options validation', () => {
+    it('should validate engagement filters when enabled', async () => {
+      const options = await TweetFilter.promptCustomOptions();
+      options.filterByEngagement = true;
+      options.minLikes = 10;
+      options.minRetweets = 5;
+
+      expect(options.filterByEngagement).toBe(true);
+      expect(options.minLikes).toBe(10);
+      expect(options.minRetweets).toBe(5);
+    });
+
+    it('should validate date filters when enabled', async () => {
+      const options = await TweetFilter.promptCustomOptions();
+      options.filterByDate = true;
+      options.startDate = '2024-01-01';
+      options.endDate = '2024-01-07';
+
+      expect(options.filterByDate).toBe(true);
+      expect(options.startDate).toBe('2024-01-01');
+      expect(options.endDate).toBe('2024-01-07');
+    });
+
+    it('should validate keyword exclusions when enabled', async () => {
+      const options = await TweetFilter.promptCustomOptions();
+      options.excludeKeywords = true;
+      options.keywordsToExclude = ['spam', 'ads'];
+
+      expect(options.excludeKeywords).toBe(true);
+      expect(options.keywordsToExclude).toEqual(['spam', 'ads']);
     });
   });
 });

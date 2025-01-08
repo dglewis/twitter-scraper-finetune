@@ -169,3 +169,16 @@ export interface ProcessedTweet {
     retweeted: string | null;
   };
 }
+
+export interface CollectionOptions {
+  tweetTypes: string[];
+  contentTypes: string[];
+  filterByEngagement: boolean;
+  filterByDate: boolean;
+  excludeKeywords: boolean;
+  minLikes?: number;
+  minRetweets?: number;
+  startDate?: string;
+  endDate?: string;
+  keywordsToExclude?: string[];
+}
