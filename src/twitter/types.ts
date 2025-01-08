@@ -105,3 +105,45 @@ export interface Logger {
   stats(title: string, data: Record<string, unknown>): void;
   reset(): void;
 }
+
+// Processed Tweet Types
+export interface ProcessedTweet {
+  id: string;
+  text: string;
+  created_at: string;
+  author: {
+    id: string;
+    username: string;
+    name: string;
+    followers_count: number;
+    following_count: number;
+    is_verified: boolean;
+  };
+  metrics: {
+    retweets: number;
+    likes: number;
+    replies: number;
+    quotes: number;
+  };
+  entities: {
+    hashtags: string[];
+    urls: {
+      short_url: string;
+      expanded_url: string;
+      display_url: string;
+    }[];
+    mentions: {
+      id: string;
+      username: string;
+      name: string;
+    }[];
+  };
+  referenced_tweets: {
+    replied_to: {
+      tweet_id: string;
+      author_id: string;
+    } | null;
+    quoted: string | null;
+    retweeted: string | null;
+  };
+}
