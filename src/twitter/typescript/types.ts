@@ -1,6 +1,14 @@
 import { z } from 'zod';
 import { Ora } from 'ora';
 
+export enum CollectionMode {
+  Timeline = 'timeline',
+  Search = 'search',
+  List = 'list',
+  Likes = 'likes',
+  Bookmarks = 'bookmarks'
+}
+
 // Twitter API Response Types
 export const TweetSchema = z.object({
   id_str: z.string(),
