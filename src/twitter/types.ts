@@ -1,4 +1,65 @@
 import type { Ora } from 'ora';
+import { z } from 'zod';
+
+// Twitter API Response Types
+export const TweetSchema = z.object({
+  id_str: z.string(),
+  created_at: z.string(),
+  text: z.string(),
+  full_text: z.string().optional(),
+  user: z.object({
+    id_str: z.string(),
+    screen_name: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    followers_count: z.number(),
+    friends_count: z.number(),
+    verified: z.boolean(),
+  }),
+  retweet_count: z.number(),
+  favorite_count: z.number(),
+  reply_count: z.number().optional(),
+  quote_count: z.number().optional(),
+  in_reply_to_status_id_str: z.string().nullable(),
+  in_reply_to_user_id_str: z.string().nullable(),
+  quoted_status_id_str: z.string().nullable(),
+  retweeted_status_id_str: z.string().nullable(),
+  entities: z.object({
+    hashtags: z.array(z.object({
+      text: z.string(),
+    })),
+    urls: z.array(z.object({
+      url: z.string(),
+      expanded_url: z.string(),
+      display_url: z.string(),
+    })),
+    user_mentions: z.array(z.object({
+      id_str: z.string(),
+      screen_name: z.string(),
+      name: z.string(),
+    })),
+  }),
+});
+
+export const UserSchema = z.object({
+  id_str: z.string(),
+  screen_name: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  followers_count: z.number(),
+  friends_count: z.number(),
+  statuses_count: z.number(),
+  favourites_count: z.number(),
+  created_at: z.string(),
+  verified: z.boolean(),
+  protected: z.boolean(),
+  location: z.string().nullable(),
+  url: z.string().nullable(),
+  profile_image_url_https: z.string(),
+});
+
+export type Tweet = z.infer<typeof TweetSchema>;
+export type User = z.infer<typeof UserSchema>;
 
 export interface CollectionStats {
   oldestTweet: number | null;
