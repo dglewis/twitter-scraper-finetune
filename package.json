@@ -9,7 +9,17 @@
     "blog": "node src/blog/blogScrape.js",
     "character": "node src/character/GenerateCharacter.js",
     "finetune": "node ./scripts/finetune.js",
-    "finetune:test": "node ./scripts/finetune.js --test"
+    "finetune:test": "node ./scripts/finetune.js --test",
+    "build": "tsup",
+    "dev": "tsx watch src/index.ts",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.{ts,js}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "validate": "pnpm type-check && pnpm lint && pnpm test"
   },
   "keywords": [],
   "author": "dreaminglucid",
@@ -33,5 +43,23 @@
     "puppeteer-extra-plugin-adblocker": "^2.13.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "ua-parser-js": "^2.0.0-rc.1"
+  },
+  "devDependencies": {
+    "@total-typescript/ts-reset": "^0.6.1",
+    "@types/inquirer": "^9.0.7",
+    "@types/node": "^22.10.5",
+    "@types/progress": "^2.0.7",
+    "@types/ua-parser-js": "^0.7.39",
+    "@typescript-eslint/eslint-plugin": "^8.19.1",
+    "@typescript-eslint/parser": "^8.19.1",
+    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/ui": "^2.1.8",
+    "prettier": "^3.4.2",
+    "prettier-plugin-organize-imports": "^4.1.0",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "zod": "^3.24.1"
   }
 }
