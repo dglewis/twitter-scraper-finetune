@@ -106,6 +106,22 @@ export interface Logger {
   reset(): void;
 }
 
+export interface LoggerConstructor {
+  new(): never;
+  startSpinner(text: string): void;
+  stopSpinner(success?: boolean): void;
+  info(msg: string): void;
+  success(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+  debug(msg: string): void;
+  updateCollectionProgress(progress: CollectionProgress): void;
+  displayCollectionStatus(status: CollectionStatus): void;
+  recordRateLimit(): void;
+  stats(title: string, data: Record<string, unknown>): void;
+  reset(): void;
+}
+
 // Processed Tweet Types
 export interface ProcessedTweet {
   id: string;

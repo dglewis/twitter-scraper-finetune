@@ -89,15 +89,26 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - Write comprehensive tests
    - Implement type-safe code
    - Validate existing functionality
-   - Use instance methods with static state where appropriate
-   - Create standardized interfaces for processed data
-   - Implement data transformation utilities as classes
-   - Use composition over inheritance for processing pipelines
+   - Keep TypeScript implementations completely separate from JavaScript ones
+   - Never modify JavaScript files - they are the source of truth
+   - Create new TypeScript files alongside existing JavaScript ones
+   - Don't try to make TypeScript code import from or depend on JavaScript files
+   - Let the JavaScript implementation continue serving production until TypeScript migration is complete
 
 3. Testing Strategy:
+   Requirements:
+   - Write tests before implementation
    - Co-locate tests with source code in `__tests__` directories
+   - TypeScript tests import only from TypeScript files
+   - JavaScript tests remain untouched
+   - Mock external dependencies
+   - Test error cases and edge conditions
+
+   Implementation Details:
    - Write tests before implementation (TDD)
    - Test both TypeScript and JavaScript files during migration
+   - TypeScript tests should only import from TypeScript files
+   - JavaScript tests should remain untouched
    - Use Vitest for TypeScript-aware testing
    - Mock external dependencies and side effects
    - Maintain high test coverage
@@ -105,12 +116,6 @@ pnpm add -D @types/inquirer @types/progress @types/ua-parser-js
    - Validate type safety in tests
    - Use proper type assertions in test code
    - Test both success and failure paths
-
-4. Testing Approach:
-   - Test-driven development
-   - Co-located tests in `__tests__` directories
-   - Full type coverage
-   - Maintain existing functionality
 
 ### Phase 3: Validation and Cleanup
 

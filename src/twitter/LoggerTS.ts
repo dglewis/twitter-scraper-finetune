@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import ora, { type Ora } from 'ora';
 import Table from 'cli-table3';
 import { format } from 'date-fns';
-import type { Logger, CollectionStats, CollectionProgress, CollectionStatus } from './types';
+import type { Logger, LoggerConstructor, CollectionStats, CollectionProgress, CollectionStatus } from './types';
 
 class LoggerTS implements Logger {
   private constructor() {
@@ -182,6 +182,67 @@ class LoggerTS implements Logger {
     };
     LoggerTS.lastUpdate = Date.now();
   }
+
+  // Static methods that delegate to instance methods
+  static startSpinner(text: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.startSpinner(text);
+  }
+
+  static stopSpinner(success = true): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.stopSpinner(success);
+  }
+
+  static info(msg: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.info(msg);
+  }
+
+  static success(msg: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.success(msg);
+  }
+
+  static warn(msg: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.warn(msg);
+  }
+
+  static error(msg: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.error(msg);
+  }
+
+  static debug(msg: string): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.debug(msg);
+  }
+
+  static updateCollectionProgress(progress: CollectionProgress): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.updateCollectionProgress(progress);
+  }
+
+  static displayCollectionStatus(status: CollectionStatus): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.displayCollectionStatus(status);
+  }
+
+  static recordRateLimit(): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.recordRateLimit();
+  }
+
+  static stats(title: string, data: Record<string, unknown>): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.stats(title, data);
+  }
+
+  static reset(): void {
+    const instance = Object.create(LoggerTS.prototype);
+    instance.reset();
+  }
 }
 
-export default LoggerTS;
+export default LoggerTS as unknown as LoggerConstructor;

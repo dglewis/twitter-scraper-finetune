@@ -1,12 +1,11 @@
 import type { Tweet, ProcessedTweet } from './types';
-import { parse } from 'date-fns';
 
 export class TweetProcessor {
   processTweet(tweet: Tweet): ProcessedTweet {
     return {
       id: tweet.id_str,
       text: tweet.full_text || tweet.text,
-      created_at: this.formatDate(tweet.created_at),
+      created_at: new Date(tweet.created_at).toISOString(),
       author: {
         id: tweet.user.id_str,
         username: tweet.user.screen_name,
@@ -43,10 +42,5 @@ export class TweetProcessor {
         retweeted: tweet.retweeted_status_id_str,
       },
     };
-  }
-
-  private formatDate(dateStr: string): string {
-    const date = parse(dateStr, 'EEE MMM dd HH:mm:ss xx yyyy', new Date());
-    return date.toISOString();
   }
 }

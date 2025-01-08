@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { TweetProcessor } from '../TweetProcessor';
 import type { Tweet } from '../types';
+import { TweetProcessor } from '../TweetProcessor';
 
 describe('TweetProcessor', () => {
   describe('processTweet', () => {
     it('should process a basic tweet correctly', () => {
-      const rawTweet = {
+      const rawTweet: Tweet = {
         id_str: '1234567890',
         created_at: 'Wed Oct 10 20:19:24 +0000 2023',
         text: 'Hello, world!',
@@ -14,7 +14,7 @@ describe('TweetProcessor', () => {
           id_str: '987654321',
           screen_name: 'testuser',
           name: 'Test User',
-          description: 'A test account',
+          description: null,
           followers_count: 100,
           friends_count: 50,
           verified: false,
@@ -66,8 +66,8 @@ describe('TweetProcessor', () => {
       });
     });
 
-    it('should handle tweets with entities correctly', () => {
-      const rawTweet = {
+    it('should process tweet entities correctly', () => {
+      const rawTweet: Tweet = {
         id_str: '1234567890',
         created_at: 'Wed Oct 10 20:19:24 +0000 2023',
         text: 'Hello @user! Check out https://t.co/abc #test',
@@ -76,7 +76,7 @@ describe('TweetProcessor', () => {
           id_str: '987654321',
           screen_name: 'testuser',
           name: 'Test User',
-          description: 'A test account',
+          description: null,
           followers_count: 100,
           friends_count: 50,
           verified: false,
@@ -120,8 +120,8 @@ describe('TweetProcessor', () => {
       });
     });
 
-    it('should handle referenced tweets correctly', () => {
-      const rawTweet = {
+    it('should process referenced tweets correctly', () => {
+      const rawTweet: Tweet = {
         id_str: '1234567890',
         created_at: 'Wed Oct 10 20:19:24 +0000 2023',
         text: 'Replying to @user',
@@ -130,7 +130,7 @@ describe('TweetProcessor', () => {
           id_str: '987654321',
           screen_name: 'testuser',
           name: 'Test User',
-          description: 'A test account',
+          description: null,
           followers_count: 100,
           friends_count: 50,
           verified: false,
@@ -158,6 +158,47 @@ describe('TweetProcessor', () => {
         },
         quoted: '77777',
         retweeted: '66666',
+      });
+    });
+
+    it('should handle optional metrics correctly', () => {
+      const rawTweet: Tweet = {
+        id_str: '1234567890',
+        created_at: 'Wed Oct 10 20:19:24 +0000 2023',
+        text: 'Test tweet',
+        full_text: 'Test tweet',
+        user: {
+          id_str: '987654321',
+          screen_name: 'testuser',
+          name: 'Test User',
+          description: null,
+          followers_count: 100,
+          friends_count: 50,
+          verified: false,
+        },
+        retweet_count: 5,
+        favorite_count: 10,
+        reply_count: 3,
+        quote_count: 2,
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [],
+        },
+        in_reply_to_status_id_str: null,
+        in_reply_to_user_id_str: null,
+        quoted_status_id_str: null,
+        retweeted_status_id_str: null,
+      };
+
+      const processor = new TweetProcessor();
+      const processed = processor.processTweet(rawTweet);
+
+      expect(processed.metrics).toEqual({
+        retweets: 5,
+        likes: 10,
+        replies: 3,
+        quotes: 2,
       });
     });
   });
