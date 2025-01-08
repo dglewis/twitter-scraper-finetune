@@ -182,3 +182,33 @@ export interface CollectionOptions {
   endDate?: string;
   keywordsToExclude?: string[];
 }
+
+export interface Analytics {
+  totalTweets: number;
+  directTweets: number;
+  replies: number;
+  retweets: number;
+  engagement: {
+    totalLikes: number;
+    totalRetweetCount: number;
+    totalReplies: number;
+    averageLikes: string;
+    topTweets: Array<{
+      id: string;
+      text: string;
+      likes: number;
+      retweetCount: number;
+      url: string;
+    }>;
+  };
+  timeRange: {
+    start: string;
+    end: string;
+  };
+  contentTypes: {
+    withImages: number;
+    withVideos: number;
+    withLinks: number;
+    textOnly: number;
+  };
+}
