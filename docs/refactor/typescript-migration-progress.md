@@ -28,11 +28,22 @@ All components have been successfully migrated to TypeScript with comprehensive 
    - Affects directTweets, replies, and retweets counts
 
 ### CLI Output and Display
-1. Missing Initial Tweet Count: The TypeScript version doesn't show the total number of available tweets for the user at start.
-2. Limited Progress Reporting: Progress indicators don't show percentage completion or context.
+1. Initial Tweet Count Limitation: The TypeScript version uses agent-twitter-client which may not always return the total tweet count. When this happens, progress indicators will show raw numbers without percentages.
+2. Limited Progress Reporting: Progress indicators don't show percentage completion when total tweet count is unavailable.
 3. Missing Content Type Summary: The detailed content type breakdown (text only, images, videos, links) is not displayed in the final summary.
 4. Missing Engagement Summary: The comprehensive engagement statistics summary is not displayed after collection.
 5. Simplified Collection Results: The collection results table is missing metrics like Success Rate and Fallback Collections.
+
+### Known Limitations
+1. Tweet Count: agent-twitter-client's getProfile method may fail to return the total tweet count. This is a limitation of the package and won't affect core functionality.
+2. Media Detection: agent-twitter-client provides limited media metadata compared to the JavaScript version.
+3. Rate Limiting: agent-twitter-client has different rate limit handling than the JavaScript version.
+
+### Next Steps
+1. Implement fallback collection for when rate limits are hit
+2. Add media detection support
+3. Enhance progress reporting with available metrics
+4. Add engagement statistics to final summary
 
 ### Action Items
 - [ ] Add proper deduplication for top tweets

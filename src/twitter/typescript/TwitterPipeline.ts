@@ -2,11 +2,13 @@ import Logger from './Logger';
 import { TweetFilter } from './TweetFilter';
 import { DataProcessor } from './DataProcessor';
 import { TweetProcessor } from './TweetProcessor';
+import { ProgressReporter } from './ProgressReporter';
 import type { Analytics, Tweet, ProcessedTweet } from './types';
 import type { Page } from 'puppeteer';
 import { Scraper, type Tweet as ScraperTweet } from 'agent-twitter-client';
 import path from 'path';
 import fs from 'fs/promises';
+import { format } from 'date-fns';
 
 interface TwitterConfig {
   maxTweets: number;
@@ -36,12 +38,17 @@ interface PipelineConfig {
 
 type PartialTwitterConfig = Partial<TwitterConfig>;
 
+interface UserInfo {
+  tweets?: number;
+}
+
 export class TwitterPipeline {
   private username: string;
   private scraper: Scraper | null = null;
   private cluster: any | null = null;
   private tweetProcessor: TweetProcessor;
   private dataProcessor: DataProcessor;
+  private progressReporter: ProgressReporter;
   private config: PipelineConfig;
   private cookiePath: string;
   private stats = {
@@ -50,12 +57,15 @@ export class TwitterPipeline {
     fallbackUsed: false,
     uniqueTweets: 0,
     retriesCount: 0,
+    totalAvailableTweets: 0,
+    startTime: Date.now(),
   };
 
   constructor(username: string, twitterConfig?: PartialTwitterConfig) {
     this.username = username;
     this.tweetProcessor = new TweetProcessor();
     this.dataProcessor = new DataProcessor('pipeline', username);
+    this.progressReporter = new ProgressReporter();
     this.cookiePath = path.join(
       process.cwd(),
       'cookies',
@@ -70,11 +80,11 @@ export class TwitterPipeline {
         retryDelay: twitterConfig?.retryDelay ?? parseInt(process.env.RETRY_DELAY || "5000"),
         minDelayBetweenRequests: twitterConfig?.minDelayBetweenRequests ?? parseInt(process.env.MIN_DELAY || "1000"),
         maxDelayBetweenRequests: twitterConfig?.maxDelayBetweenRequests ?? parseInt(process.env.MAX_DELAY || "3000"),
-        rateLimitThreshold: twitterConfig?.rateLimitThreshold ?? 3, // Number of rate limits before considering fallback
+        rateLimitThreshold: twitterConfig?.rateLimitThreshold ?? 3,
       },
       fallback: {
         enabled: true,
-        sessionDuration: 30 * 60 * 1000, // 30 minutes
+        sessionDuration: 30 * 60 * 1000,
         viewport: {
           width: 1366,
           height: 768,
@@ -248,16 +258,22 @@ export class TwitterPipeline {
     let rateLimitRetries = 0;
     let noNewTweetsCount = 0;
 
+    // Try to get initial tweet count (optional, won't affect core functionality)
+    try {
+      const userInfo = await scraper.getProfile(this.username) as { tweets?: number };
+      if (userInfo?.tweets) {
+        this.stats.totalAvailableTweets = userInfo.tweets;
+        Logger.info(this.progressReporter.displayInitialCount(this.username, this.stats.totalAvailableTweets));
+      }
+    } catch (error) {
+      Logger.debug(`Failed to get total tweet count: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
     Logger.info(`Starting tweet collection for user: ${this.username}`);
     Logger.info(`Initial next_token: ${nextToken || 'none'}`);
 
     while (tweets.length < this.config.twitter.maxTweets) {
       try {
-        const delay = Math.floor(
-          this.config.twitter.minDelayBetweenRequests +
-          Math.random() * (this.config.twitter.maxDelayBetweenRequests - this.config.twitter.minDelayBetweenRequests)
-        );
-        Logger.info(`Waiting ${delay}ms before next request...`);
         await this.randomDelay(
           this.config.twitter.minDelayBetweenRequests,
           this.config.twitter.maxDelayBetweenRequests
@@ -266,11 +282,9 @@ export class TwitterPipeline {
         Logger.info('Fetching tweets');
         const response = await scraper.getTweets(this.username, nextToken ? parseInt(nextToken) : undefined);
         Logger.info('Got response from Twitter API');
-
         Logger.info('Processing tweet response...');
-        const responseTweets: Tweet[] = [];
 
-        // Handle the async iterator response
+        const responseTweets: Tweet[] = [];
         for await (const scraperTweet of response) {
           if (tweets.length >= this.config.twitter.maxTweets) {
             Logger.info('Reached max tweets limit, stopping collection');
@@ -287,21 +301,17 @@ export class TwitterPipeline {
           }
         }
 
-        Logger.info(`Processed ${responseTweets.length} tweets from response`);
-
         if (responseTweets.length === 0) {
           noNewTweetsCount++;
           Logger.warn(`No new tweets in response (attempt ${noNewTweetsCount}/3)`);
           if (noNewTweetsCount >= 3) {
-            Logger.warn("No new tweets in last 3 requests, stopping collection");
+            Logger.warn('No new tweets in last 3 requests, stopping collection');
             break;
           }
           continue;
         }
 
         noNewTweetsCount = 0;
-
-        // Process tweets through TweetProcessor
         const newTweets = responseTweets
           .map(tweet => this.tweetProcessor.processTweet(tweet))
           .filter((tweet): tweet is ProcessedTweet => tweet !== null);
@@ -315,14 +325,8 @@ export class TwitterPipeline {
             const newestDate = new Date(newest.created_at);
             Logger.info(`Tweet date range: ${oldestDate.toISOString()} to ${newestDate.toISOString()}`);
 
-            Logger.updateCollectionProgress({
-              totalCollected: tweets.length + newTweets.length,
-              newInBatch: newTweets.length,
-              batchSize: responseTweets.length,
-              oldestTweetDate: oldestDate.getTime(),
-              newestTweetDate: newestDate.getTime(),
-              currentDelay: this.config.twitter.minDelayBetweenRequests,
-            });
+            // Add progress update
+            Logger.info(this.progressReporter.updateProgress(tweets.length + newTweets.length, this.stats.totalAvailableTweets));
           }
         }
 
@@ -334,11 +338,18 @@ export class TwitterPipeline {
           Logger.info('Reached max tweets limit, stopping collection');
           break;
         }
+
         rateLimitRetries = 0;
+        const lastTweet = responseTweets[responseTweets.length - 1];
+        if (lastTweet) {
+          nextToken = lastTweet.id_str;
+          await this.dataProcessor.saveNextToken(nextToken);
+        }
 
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (errorMessage.includes('Rate limit')) {
+          this.stats.rateLimitHits++;
           rateLimitRetries++;
           Logger.warn(`Rate limit hit (attempt ${rateLimitRetries}/${this.config.twitter.rateLimitThreshold})`);
           if (rateLimitRetries >= this.config.twitter.rateLimitThreshold) {
@@ -359,6 +370,28 @@ export class TwitterPipeline {
     }
 
     Logger.info(`Collection complete. Total tweets collected: ${tweets.length}`);
+
+    // Add final collection results
+    const runtime = (Date.now() - this.stats.startTime) / 1000;
+    const results = {
+      totalTweets: tweets.length,
+      originalTweets: tweets.filter(t => !t.referenced_tweets.retweeted && !t.referenced_tweets.replied_to).length,
+      replies: tweets.filter(t => t.referenced_tweets.replied_to).length,
+      retweets: tweets.filter(t => t.referenced_tweets.retweeted).length,
+      dateRange: {
+        start: tweets[tweets.length - 1]?.created_at || 'N/A',
+        end: tweets[0]?.created_at || 'N/A'
+      },
+      runtime,
+      collectionRate: tweets.length / (runtime / 60),
+      successRate: this.stats.totalAvailableTweets > 0 ? (tweets.length / this.stats.totalAvailableTweets) * 100 : 100,
+      rateLimitHits: this.stats.rateLimitHits,
+      fallbackCollections: this.stats.fallbackCount,
+      storageLocation: path.join('pipeline', this.username, format(new Date(), 'yyyy-MM-dd'))
+    };
+
+    Logger.info(this.progressReporter.displayCollectionResults(results));
+
     return tweets;
   }
 

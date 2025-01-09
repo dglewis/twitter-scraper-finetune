@@ -8,7 +8,7 @@ Pipeline for generating AI character files and training datasets by scraping pub
 
 1. Install dependencies:
    ```bash
-   npm install
+   pnpm install
    ```
 
 2. Copy the `.env.example` into a `.env` file:
@@ -24,49 +24,98 @@ Pipeline for generating AI character files and training datasets by scraping pub
    MAX_TWEETS=          # max tweets to scrape
    MAX_RETRIES=         # max retries for scraping
    RETRY_DELAY=         # delay between retries
-   MIN_DELAY=           # minimum delay between requests
-   MAX_DELAY=           # maximum delay between requests
+   MIN_DELAY=          # minimum delay between requests
+   MAX_DELAY=          # maximum delay between requests
    ```
 
 ## Usage
 
-### Twitter Collection
-```bash
-npm run twitter -- username
-```
-Example: `npm run twitter -- pmarca`
+### Twitter Collection (✅ TypeScript Available)
 
-### Blog Collection
+TypeScript version (recommended):
 ```bash
-npm run blog
+pnpm tw --mode <mode> --username <username> --limit <number>
 ```
 
-### Generate Character
-```bash
-npm run character -- username
-```
-Example: `npm run character -- pmarca`
+Available collection modes:
+- `timeline`: Collect tweets from user's timeline
+- `search`: Search for tweets from the user
+- `list`: Collect tweets from a user's list
+- `likes`: Collect tweets liked by the user
+- `bookmarks`: Collect bookmarked tweets
 
-### Finetune
+Example:
 ```bash
-npm run finetune
-```
-
-### Finetune (with test)
-```bash
-npm run finetune:test
+pnpm tw --mode timeline --username pmarca --limit 5000
 ```
 
-### Generate Virtuals Character Card
+Features:
+- Command-line arguments for configuration
+- Multiple collection modes
+- Concise progress output
+- Collection rate and efficiency metrics
+
+JavaScript version:
+```bash
+# Run the scraper (only username as argument)
+pnpm twitter pmarca
+
+# All other options must be set in .env:
+MAX_TWEETS=5000      # Number of tweets to collect (default: 50000)
+MAX_RETRIES=5        # Number of retries on failure (default: 5)
+RETRY_DELAY=5000     # Delay between retries in ms (default: 5000)
+MIN_DELAY=1000       # Min delay between requests in ms (default: 1000)
+MAX_DELAY=3000       # Max delay between requests in ms (default: 3000)
+```
+
+Features:
+- Detailed progress with percentage
+- Interactive sample tweet viewer
+- Content type breakdown
+- Engagement statistics
+- Comprehensive analytics table
+
+### Blog Collection (🚧 JavaScript Only)
+```bash
+pnpm blog
+```
+
+### Generate Character (🚧 JavaScript Only)
+```bash
+pnpm character -- username
+```
+Example: `pnpm character -- pmarca`
+
+### Finetune (🚧 JavaScript Only)
+```bash
+pnpm finetune
+```
+
+### Finetune Test (🚧 JavaScript Only)
+```bash
+pnpm finetune:test
+```
+
+### Generate Virtuals Character Card (🚧 JavaScript Only)
 https://whitepaper.virtuals.io/developer-documents/agent-contribution/contribute-to-cognitive-core#character-card-and-goal-samples
 
-Run this after Twitter Collection step 
+Run this after Twitter Collection step
 ```bash
-npm run generate-virtuals -- username date 
+pnpm generate-virtuals -- username date
 ```
 
-Example: `npm run generate-virtuals -- pmarca 2024-11-29`
-Example without date: `npm run generate-virtuals -- pmarca`
+Example: `pnpm generate-virtuals -- pmarca 2024-11-29`
+Example without date: `pnpm generate-virtuals -- pmarca`
 
-The generated character file will be in the `pipeline/[username]/[date]/character/character.json` directory.
-The generated tweet dataset file will be in `pipeline/[username]/[date]/raw/tweets.json`.
+## Output Files
+
+The generated files will be in the following locations:
+- Character file: `pipeline/[username]/[date]/character/character.json`
+- Tweet dataset: `pipeline/[username]/[date]/raw/tweets.json`
+- URLs list: `pipeline/[username]/[date]/raw/urls.txt`
+- Analytics: `pipeline/[username]/[date]/analytics/stats.json`
+- Fine-tuning data: `pipeline/[username]/[date]/processed/finetuning.jsonl`
+
+## Migration Status
+
+Currently, only the Twitter collection module has been migrated to TypeScript. Other modules (blog collection, character generation, fine-tuning) remain in JavaScript. The TypeScript migration is being done incrementally to ensure stability and maintain functionality.

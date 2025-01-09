@@ -1,17 +1,15 @@
 {
   "name": "degen_scraper",
-  "version": "1.0.0",
-  "main": "",
+  "version": "2.0.0",
+  "main": "dist/index.js",
   "type": "module",
   "scripts": {
-    "generate-virtuals": "node src/virtuals/GenerateCharacter.js",
     "twitter": "node src/twitter/index.js",
+    "tw": "tsx src/twitter/typescript/index.ts",
     "blog": "node src/blog/blogScrape.js",
     "character": "node src/character/GenerateCharacter.js",
-    "finetune": "node ./scripts/finetune.js",
-    "finetune:test": "node ./scripts/finetune.js --test",
-    "build": "tsup",
-    "dev": "tsx watch src/index.ts",
+    "finetune": "node scripts/finetune.js",
+    "finetune:test": "node scripts/finetune.js --test",
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,js}\"",
@@ -21,10 +19,13 @@
     "test:coverage": "vitest run --coverage",
     "validate": "pnpm type-check && pnpm lint && pnpm test"
   },
-  "keywords": [],
+  "keywords": ["twitter", "scraper", "typescript", "data-collection"],
   "author": "dreaminglucid",
+  "contributors": [
+    "dglewis (TypeScript migration)"
+  ],
   "license": "MIT",
-  "description": "",
+  "description": "Twitter data collection pipeline with TypeScript support for generating AI training datasets",
   "dependencies": {
     "agent-twitter-client": "^0.0.13",
     "axios": "^1.7.7",

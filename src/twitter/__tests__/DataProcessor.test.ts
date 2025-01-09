@@ -159,6 +159,60 @@ describe('DataProcessor', () => {
           user_mentions: [],
         },
       },
+      {
+        id_str: '789',
+        text: 'Original tweet',
+        created_at: '2023-01-03T12:00:00.000Z',
+        favorite_count: 100,
+        retweet_count: 50,
+        in_reply_to_status_id_str: null,
+        in_reply_to_user_id_str: null,
+        quoted_status_id_str: null,
+        retweeted_status_id_str: null,
+        user: {
+          id_str: 'user456',
+          screen_name: 'otheruser',
+          name: 'Other User',
+          description: 'Other user description',
+          followers_count: 200,
+          friends_count: 100,
+          verified: true,
+        },
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [],
+        },
+      },
+      {
+        id_str: '101112',
+        text: 'RT @otheruser: Original tweet',
+        created_at: '2023-01-03T13:00:00.000Z',
+        favorite_count: 0,
+        retweet_count: 0,
+        in_reply_to_status_id_str: null,
+        in_reply_to_user_id_str: null,
+        quoted_status_id_str: null,
+        retweeted_status_id_str: '789',
+        user: {
+          id_str: 'user789',
+          screen_name: 'retweeter',
+          name: 'Retweeter',
+          description: 'Retweeter description',
+          followers_count: 50,
+          friends_count: 25,
+          verified: false,
+        },
+        entities: {
+          hashtags: [],
+          urls: [],
+          user_mentions: [{
+            id_str: 'user456',
+            screen_name: 'otheruser',
+            name: 'Other User',
+          }],
+        },
+      },
     ];
 
     it('should save tweets and generate all required files', async () => {
@@ -190,26 +244,26 @@ describe('DataProcessor', () => {
       const analytics = processor.generateAnalytics(mockTweets);
 
       expect(analytics).toEqual({
-        totalTweets: 2,
-        directTweets: 1,
+        totalTweets: 4,
+        directTweets: 2,
         replies: 1,
-        retweets: 0,
+        retweets: 1,
         engagement: {
-          totalLikes: 30,
-          totalRetweetCount: 13,
+          totalLikes: 130,
+          totalRetweetCount: 63,
           totalReplies: 0,
-          averageLikes: '15.00',
+          averageLikes: '43.33',
           topTweets: expect.any(Array),
         },
         timeRange: {
           start: '2023-01-01',
-          end: '2023-01-02',
+          end: '2023-01-03',
         },
         contentTypes: {
           withImages: 0,
           withVideos: 0,
           withLinks: 1,
-          textOnly: 1,
+          textOnly: 3,
         },
       });
     });
@@ -257,6 +311,40 @@ describe('DataProcessor', () => {
             replies: 0,
           },
         },
+      });
+    });
+
+    describe('Top Tweets Processing', () => {
+      it('should exclude retweets from top tweets', () => {
+        const analytics = processor.generateAnalytics(mockTweets);
+        const topTweetIds = analytics.engagement.topTweets.map(t => t.id);
+
+        // The retweet (id: '101112') should not be in top tweets
+        expect(topTweetIds).not.toContain('101112');
+        // The original tweet (id: '789') should be included
+        expect(topTweetIds).toContain('789');
+      });
+
+      it('should not have duplicate tweets in top tweets', () => {
+        const analytics = processor.generateAnalytics(mockTweets);
+        const topTweetIds = analytics.engagement.topTweets.map(t => t.id);
+        const uniqueIds = new Set(topTweetIds);
+
+        // Number of top tweets should equal number of unique IDs
+        expect(topTweetIds.length).toBe(uniqueIds.size);
+      });
+
+      it('should sort top tweets by likes in descending order', () => {
+        const analytics = processor.generateAnalytics(mockTweets);
+        const likes = analytics.engagement.topTweets.map(t => t.likes);
+
+        // Verify likes are in descending order
+        expect(likes).toEqual([...likes].sort((a, b) => b - a));
+      });
+
+      it('should limit top tweets to 5 entries', () => {
+        const analytics = processor.generateAnalytics(mockTweets);
+        expect(analytics.engagement.topTweets.length).toBeLessThanOrEqual(5);
       });
     });
   });

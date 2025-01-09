@@ -195,17 +195,22 @@ export class DataProcessor {
       .filter((d): d is number => d !== null)
       .sort();
 
+    // Filter out retweets for engagement metrics
+    const tweetsForEngagement = tweets.filter(t => !t.retweeted_status_id_str);
+
+    const totalLikes = tweetsForEngagement.reduce((sum, t) => sum + t.favorite_count, 0);
+
     return {
       totalTweets: tweets.length,
       directTweets: tweets.filter(t => !t.in_reply_to_status_id_str && !t.retweeted_status_id_str).length,
       replies: tweets.filter(t => t.in_reply_to_status_id_str).length,
       retweets: tweets.filter(t => t.retweeted_status_id_str).length,
       engagement: {
-        totalLikes: tweets.reduce((sum, t) => sum + t.favorite_count, 0),
-        totalRetweetCount: tweets.reduce((sum, t) => sum + t.retweet_count, 0),
+        totalLikes,
+        totalRetweetCount: tweetsForEngagement.reduce((sum, t) => sum + t.retweet_count, 0),
         totalReplies: 0, // Not available in basic Tweet type
-        averageLikes: (tweets.reduce((sum, t) => sum + t.favorite_count, 0) / tweets.length).toFixed(2),
-        topTweets: tweets
+        averageLikes: (totalLikes / tweetsForEngagement.length).toFixed(2),
+        topTweets: tweetsForEngagement
           .sort((a, b) => b.favorite_count - a.favorite_count)
           .slice(0, 5)
           .map(t => ({
@@ -231,7 +236,7 @@ export class DataProcessor {
 
   generateFinetuningData(tweets: Tweet[]): FinetuningData[] {
     return tweets
-      .filter(t => !t.retweeted_status_id_str) // Exclude retweets
+      .filter(t => !t.retweeted_status_id_str && !t.in_reply_to_status_id_str) // Exclude retweets and replies
       .map(tweet => ({
         text: tweet.text,
         metadata: {
