@@ -27,11 +27,22 @@ All components have been successfully migrated to TypeScript with comprehensive 
    - Need to align with JavaScript version's classification logic
    - Affects directTweets, replies, and retweets counts
 
+### CLI Output and Display
+1. Missing Initial Tweet Count: The TypeScript version doesn't show the total number of available tweets for the user at start.
+2. Limited Progress Reporting: Progress indicators don't show percentage completion or context.
+3. Missing Content Type Summary: The detailed content type breakdown (text only, images, videos, links) is not displayed in the final summary.
+4. Missing Engagement Summary: The comprehensive engagement statistics summary is not displayed after collection.
+5. Simplified Collection Results: The collection results table is missing metrics like Success Rate and Fallback Collections.
+
 ### Action Items
 - [ ] Add proper deduplication for top tweets
 - [ ] Add media entity support to Tweet type and processing
 - [ ] Include reply counts in Tweet type
 - [ ] Align tweet type classification with JavaScript version
+- [ ] Enhance CLI output to match JavaScript version's comprehensive display
+- [ ] Add progress percentage calculation and reporting
+- [ ] Implement content type and engagement statistics summaries
+- [ ] Add detailed collection results table with all metrics
 
 ## Final Test Coverage
 
