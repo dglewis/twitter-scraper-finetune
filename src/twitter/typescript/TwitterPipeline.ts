@@ -5,7 +5,7 @@ import { TweetProcessor } from './TweetProcessor';
 import { ProgressReporter } from './ProgressReporter';
 import type { Analytics, Tweet, ProcessedTweet } from './types';
 import type { Page } from 'puppeteer';
-import { Scraper, type Tweet as ScraperTweet } from 'agent-twitter-client';
+import { Scraper, type Profile, type Tweet as ScraperTweet, SearchMode } from 'agent-twitter-client';
 import path from 'path';
 import fs from 'fs/promises';
 import { format } from 'date-fns';
@@ -40,6 +40,28 @@ type PartialTwitterConfig = Partial<TwitterConfig>;
 
 interface UserInfo {
   tweets?: number;
+}
+
+// Define the scraper tweet interface based on what we're actually getting
+interface ScrapedTweet {
+  id: string;
+  text: string;
+  timestamp?: number;
+  timeParsed?: Date;
+  username?: string;
+  name?: string;
+  isReply?: boolean;
+  isRetweet?: boolean;
+  likes?: number;
+  retweets?: number;
+  replies?: number;
+  photos?: string[];
+  videos?: string[];
+  urls?: string[];
+  permanentUrl?: string;
+  quotedStatusId?: string;
+  inReplyToStatusId?: string;
+  hashtags?: string[];
 }
 
 export class TwitterPipeline {
@@ -253,146 +275,149 @@ export class TwitterPipeline {
   }
 
   async collectTweets(scraper: Scraper): Promise<ProcessedTweet[]> {
-    const tweets: ProcessedTweet[] = [];
-    let nextToken: string | null = await this.dataProcessor.getLastNextToken();
-    let rateLimitRetries = 0;
-    let noNewTweetsCount = 0;
+    const tweets = new Map<string, Tweet>();
+    let previousCount = 0;
+    let stagnantBatches = 0;
+    const MAX_STAGNANT_BATCHES = 2;
 
-    // Try to get initial tweet count (optional, won't affect core functionality)
+    // Get total tweet count from profile
     try {
-      const userInfo = await scraper.getProfile(this.username) as { tweets?: number };
-      if (userInfo?.tweets) {
-        this.stats.totalAvailableTweets = userInfo.tweets;
-        Logger.info(this.progressReporter.displayInitialCount(this.username, this.stats.totalAvailableTweets));
-      }
+      const profile = await scraper.getProfile(this.username) as Profile & { tweetsCount: number };
+      this.stats.totalAvailableTweets = profile.tweetsCount;
+      Logger.info(this.progressReporter.displayInitialCount(this.username, this.stats.totalAvailableTweets));
     } catch (error) {
-      Logger.debug(`Failed to get total tweet count: ${error instanceof Error ? error.message : String(error)}`);
+      Logger.debug(`Failed to get tweet count: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     Logger.info(`Starting tweet collection for user: ${this.username}`);
-    Logger.info(`Initial next_token: ${nextToken || 'none'}`);
 
-    while (tweets.length < this.config.twitter.maxTweets) {
-      try {
-        await this.randomDelay(
-          this.config.twitter.minDelayBetweenRequests,
-          this.config.twitter.maxDelayBetweenRequests
-        );
+    // Try main collection first
+    try {
+      const searchResults = scraper.searchTweets(
+        `from:${this.username}`,
+        this.config.twitter.maxTweets,
+        SearchMode.Latest
+      );
 
-        Logger.info('Fetching tweets');
-        const response = await scraper.getTweets(this.username, nextToken ? parseInt(nextToken) : undefined);
-        Logger.info('Got response from Twitter API');
-        Logger.info('Processing tweet response...');
-
-        const responseTweets: Tweet[] = [];
-        for await (const scraperTweet of response) {
-          if (tweets.length >= this.config.twitter.maxTweets) {
-            Logger.info('Reached max tweets limit, stopping collection');
-            break;
+      for await (const scrapedTweet of searchResults) {
+        const tweet = scrapedTweet as unknown as ScrapedTweet;
+        if (tweet && tweet.id) {
+          let timestamp = tweet.timestamp;
+          if (!timestamp) {
+            timestamp = tweet.timeParsed?.getTime() || Date.now();
           }
+          if (timestamp < 1e12) timestamp *= 1000;
 
-          if (scraperTweet) {
-            const tweet = this.convertScraperTweetToTweet(scraperTweet);
-            if (TweetFilter.isValid(tweet)) {
-              responseTweets.push(tweet);
-            } else {
-              Logger.debug(`Tweet ${tweet.id_str} filtered out`);
+          const rawTweet: Tweet = {
+            id_str: tweet.id,
+            created_at: new Date(timestamp).toISOString(),
+            text: tweet.text || '',
+            user: {
+              id_str: tweet.id, // We don't have author ID, use tweet ID as fallback
+              screen_name: tweet.username || this.username,
+              name: tweet.name || tweet.username || this.username,
+              description: null,
+              followers_count: 0,
+              friends_count: 0,
+              verified: false
+            },
+            retweet_count: tweet.retweets || 0,
+            favorite_count: tweet.likes || 0,
+            reply_count: tweet.replies || 0,
+            quote_count: 0,
+            entities: {
+              hashtags: (tweet.hashtags || []).map(tag => ({ text: tag })),
+              urls: (tweet.urls || []).map(url => ({
+                url: url,
+                expanded_url: url,
+                display_url: url
+              })),
+              user_mentions: []
+            },
+            in_reply_to_status_id_str: tweet.inReplyToStatusId || null,
+            in_reply_to_user_id_str: null,
+            quoted_status_id_str: tweet.quotedStatusId || null,
+            retweeted_status_id_str: null
+          };
+
+          const processedTweet = this.tweetProcessor.processTweet(rawTweet);
+          if (processedTweet && TweetFilter.isValid(rawTweet)) {
+            tweets.set(tweet.id, rawTweet);
+
+            if (tweets.size % 100 === 0) {
+              const completion = ((tweets.size / this.stats.totalAvailableTweets) * 100).toFixed(1);
+              Logger.info(`📊 Progress: ${tweets.size.toLocaleString()} unique tweets (${completion}%)`);
+
+              if (tweets.size === previousCount) {
+                stagnantBatches++;
+                if (stagnantBatches >= MAX_STAGNANT_BATCHES) {
+                  Logger.info("📝 Collection rate has stagnated, checking fallback...");
+                  break;
+                }
+              } else {
+                stagnantBatches = 0;
+              }
+              previousCount = tweets.size;
             }
           }
         }
 
-        if (responseTweets.length === 0) {
-          noNewTweetsCount++;
-          Logger.warn(`No new tweets in response (attempt ${noNewTweetsCount}/3)`);
-          if (noNewTweetsCount >= 3) {
-            Logger.warn('No new tweets in last 3 requests, stopping collection');
-            break;
-          }
-          continue;
-        }
-
-        noNewTweetsCount = 0;
-        const newTweets = responseTweets
-          .map(tweet => this.tweetProcessor.processTweet(tweet))
-          .filter((tweet): tweet is ProcessedTweet => tweet !== null);
-
-        if (responseTweets.length > 0) {
-          const oldest = responseTweets[responseTweets.length - 1];
-          const newest = responseTweets[0];
-
-          if (oldest && newest) {
-            const oldestDate = new Date(oldest.created_at);
-            const newestDate = new Date(newest.created_at);
-            Logger.info(`Tweet date range: ${oldestDate.toISOString()} to ${newestDate.toISOString()}`);
-
-            // Add progress update
-            Logger.info(this.progressReporter.updateProgress(tweets.length + newTweets.length, this.stats.totalAvailableTweets));
-          }
-        }
-
-        const toAdd = newTweets.slice(0, this.config.twitter.maxTweets - tweets.length);
-        Logger.info(`Adding ${toAdd.length} new tweets to collection`);
-        tweets.push(...toAdd);
-
-        if (tweets.length >= this.config.twitter.maxTweets) {
+        if (tweets.size >= this.config.twitter.maxTweets) {
           Logger.info('Reached max tweets limit, stopping collection');
           break;
         }
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes("rate limit")) {
+        this.stats.rateLimitHits++;
+        if (this.stats.rateLimitHits >= this.config.twitter.rateLimitThreshold) {
+          Logger.info("Switching to fallback collection...");
+          const fallbackTweets = await this.collectWithFallback(`from:${this.username}`);
 
-        rateLimitRetries = 0;
-        const lastTweet = responseTweets[responseTweets.length - 1];
-        if (lastTweet) {
-          nextToken = lastTweet.id_str;
-          await this.dataProcessor.saveNextToken(nextToken);
-        }
-
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('Rate limit')) {
-          this.stats.rateLimitHits++;
-          rateLimitRetries++;
-          Logger.warn(`Rate limit hit (attempt ${rateLimitRetries}/${this.config.twitter.rateLimitThreshold})`);
-          if (rateLimitRetries >= this.config.twitter.rateLimitThreshold) {
-            Logger.warn(`Rate limit threshold reached (${rateLimitRetries}), stopping collection`);
-            break;
+          for (const tweet of fallbackTweets) {
+            if (tweet.id_str) {
+              tweets.set(tweet.id_str, tweet);
+              this.stats.fallbackUsed = true;
+            }
           }
-          const retryDelay = this.config.twitter.retryDelay * 2;
-          Logger.info(`Waiting ${retryDelay}ms before retry...`);
-          await this.randomDelay(
-            this.config.twitter.retryDelay,
-            this.config.twitter.retryDelay * 2
-          );
-          continue;
         }
-        Logger.error(`Failed to collect tweets: ${errorMessage}\nFull error: ${JSON.stringify(error, null, 2)}`);
-        break;
+      }
+      Logger.warn(`⚠️  Search error: ${errorMessage}`);
+    }
+
+    // Use fallback if we haven't collected enough tweets
+    if (tweets.size < this.stats.totalAvailableTweets * 0.8 && this.config.fallback.enabled) {
+      Logger.info("\n🔍 Collecting additional tweets via fallback...");
+
+      try {
+        const fallbackTweets = await this.collectWithFallback(`from:${this.username}`);
+        let newTweetsCount = 0;
+
+        for (const tweet of fallbackTweets) {
+          if (tweet.id_str) {
+            tweets.set(tweet.id_str, tweet);
+            newTweetsCount++;
+            this.stats.fallbackUsed = true;
+          }
+        }
+
+        if (newTweetsCount > 0) {
+          Logger.info(`Found ${newTweetsCount} additional tweets via fallback`);
+        }
+      } catch (error) {
+        Logger.warn(`⚠️  Fallback collection error: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
 
-    Logger.info(`Collection complete. Total tweets collected: ${tweets.length}`);
+    Logger.success(
+      `\n🎉 Collection complete! ${tweets.size.toLocaleString()} unique tweets collected${
+        this.stats.fallbackUsed ? ` (including fallback tweets)` : ""
+      }`
+    );
 
-    // Add final collection results
-    const runtime = (Date.now() - this.stats.startTime) / 1000;
-    const results = {
-      totalTweets: tweets.length,
-      originalTweets: tweets.filter(t => !t.referenced_tweets.retweeted && !t.referenced_tweets.replied_to).length,
-      replies: tweets.filter(t => t.referenced_tweets.replied_to).length,
-      retweets: tweets.filter(t => t.referenced_tweets.retweeted).length,
-      dateRange: {
-        start: tweets[tweets.length - 1]?.created_at || 'N/A',
-        end: tweets[0]?.created_at || 'N/A'
-      },
-      runtime,
-      collectionRate: tweets.length / (runtime / 60),
-      successRate: this.stats.totalAvailableTweets > 0 ? (tweets.length / this.stats.totalAvailableTweets) * 100 : 100,
-      rateLimitHits: this.stats.rateLimitHits,
-      fallbackCollections: this.stats.fallbackCount,
-      storageLocation: path.join('pipeline', this.username, format(new Date(), 'yyyy-MM-dd'))
-    };
-
-    Logger.info(this.progressReporter.displayCollectionResults(results));
-
-    return tweets;
+    // Process all tweets at the end
+    return Array.from(tweets.values()).map(tweet => this.tweetProcessor.processTweet(tweet)).filter((tweet): tweet is ProcessedTweet => tweet !== null);
   }
 
   async cleanup(): Promise<void> {
@@ -474,17 +499,15 @@ export class TwitterPipeline {
     }
   }
 
-  async collectWithFallback(searchQuery: string): Promise<ProcessedTweet[]> {
+  async collectWithFallback(searchQuery: string): Promise<Tweet[]> {
     Logger.info("Initializing fallback collection mode...");
     await this.initializeFallback();
 
-    const tweets: ProcessedTweet[] = [];
+    const tweets: Tweet[] = [];
     const fallbackTask = async ({ page }: { page: Page }) => {
       await this.setupFallbackPage(page);
 
       try {
-        // ... existing fallback collection code ...
-
         // Use TweetProcessor for fallback tweets too
         const newTweets = await page.evaluate(() => {
           const tweetElements = document.querySelectorAll('[data-testid="tweet"]');
@@ -493,35 +516,35 @@ export class TwitterPipeline {
             text: tweet.querySelector('[data-testid="tweetText"]')?.textContent || '',
             created_at: tweet.querySelector('time')?.dateTime || new Date().toISOString(),
             user: {
-              id_str: 'fallback_user',
-              screen_name: tweet.querySelector('[data-testid="User-Name"] a')?.textContent?.replace('@', '') || '',
-              name: tweet.querySelector('[data-testid="User-Name"] span')?.textContent || '',
+              id_str: 'fallback',
+              screen_name: 'fallback',
+              name: 'fallback',
               description: null,
               followers_count: 0,
               friends_count: 0,
-              verified: false,
+              verified: false
             },
             retweet_count: 0,
             favorite_count: 0,
+            reply_count: 0,
+            quote_count: 0,
             entities: {
               hashtags: [],
               urls: [],
-              user_mentions: [],
+              user_mentions: []
             },
             in_reply_to_status_id_str: null,
             in_reply_to_user_id_str: null,
             quoted_status_id_str: null,
-            retweeted_status_id_str: null,
+            retweeted_status_id_str: null
           }));
         });
 
         for (const tweet of newTweets) {
           if (!tweets.some(t => t.text === tweet.text)) {
-            tweets.push(this.tweetProcessor.processTweet(tweet));
+            tweets.push(tweet);
           }
         }
-
-        // ... rest of fallback collection code ...
       } catch (error) {
         Logger.error(`Fallback collection error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         throw error;
@@ -536,6 +559,56 @@ export class TwitterPipeline {
       return [];
     } finally {
       await this.cluster?.close();
+    }
+  }
+
+  private processTweetData(tweet: any): Tweet | null {
+    try {
+      if (!tweet || !tweet.id) return null;
+
+      let timestamp = tweet.timestamp;
+      if (!timestamp) {
+        timestamp = new Date(tweet.created_at).getTime();
+      }
+
+      if (!timestamp) return null;
+
+      if (timestamp < 1e12) timestamp *= 1000;
+
+      if (isNaN(timestamp) || timestamp <= 0) {
+        Logger.warn(`⚠️  Invalid timestamp for tweet ${tweet.id}`);
+        return null;
+      }
+
+      return {
+        id_str: tweet.id,
+        text: tweet.text,
+        created_at: new Date(timestamp).toISOString(),
+        user: {
+          id_str: tweet.user?.id_str || 'unknown',
+          screen_name: tweet.user?.screen_name || this.username,
+          name: tweet.user?.name || this.username,
+          description: tweet.user?.description || null,
+          followers_count: tweet.user?.followers_count || 0,
+          friends_count: tweet.user?.friends_count || 0,
+          verified: tweet.user?.verified || false
+        },
+        retweet_count: tweet.retweet_count || 0,
+        favorite_count: tweet.favorite_count || 0,
+        reply_count: tweet.reply_count || 0,
+        entities: {
+          hashtags: tweet.entities?.hashtags || [],
+          urls: tweet.entities?.urls || [],
+          user_mentions: tweet.entities?.user_mentions || []
+        },
+        in_reply_to_status_id_str: tweet.in_reply_to_status_id_str || null,
+        in_reply_to_user_id_str: tweet.in_reply_to_user_id_str || null,
+        quoted_status_id_str: tweet.quoted_status_id_str || null,
+        retweeted_status_id_str: tweet.retweeted_status_id_str || null
+      };
+    } catch (error) {
+      Logger.warn(`⚠️  Error processing tweet ${tweet?.id}: ${error instanceof Error ? error.message : String(error)}`);
+      return null;
     }
   }
 }

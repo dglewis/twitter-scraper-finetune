@@ -19,7 +19,12 @@
     "test:coverage": "vitest run --coverage",
     "validate": "pnpm type-check && pnpm lint && pnpm test"
   },
-  "keywords": ["twitter", "scraper", "typescript", "data-collection"],
+  "keywords": [
+    "twitter",
+    "scraper",
+    "typescript",
+    "data-collection"
+  ],
   "author": "dreaminglucid",
   "contributors": [
     "dglewis (TypeScript migration)"
@@ -27,7 +32,7 @@
   "license": "MIT",
   "description": "Twitter data collection pipeline with TypeScript support for generating AI training datasets",
   "dependencies": {
-    "agent-twitter-client": "^0.0.13",
+    "agent-twitter-client": "^0.0.18",
     "axios": "^1.7.7",
     "chalk": "^5.3.0",
     "cheerio": "^1.0.0",

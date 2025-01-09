@@ -34,6 +34,24 @@ interface Analytics {
   };
 }
 
+interface TweetEntities {
+  hashtags: Array<{ text: string }>;
+  urls: Array<{
+    url: string;
+    expanded_url: string;
+    display_url: string;
+  }>;
+  user_mentions: Array<{
+    id_str: string;
+    screen_name: string;
+    name: string;
+  }>;
+  media?: Array<{
+    type: string;
+    media_url: string;
+  }>;
+}
+
 interface FinetuningData {
   text: string;
   metadata: {
@@ -47,19 +65,18 @@ interface FinetuningData {
   };
 }
 
+interface ExtendedTweet extends Tweet {
+  entities: TweetEntities;
+}
+
 export class DataProcessor {
-  private readonly baseDir: string;
+  private baseDir: string;
 
   constructor(baseDir: string, username: string) {
-    this.baseDir = path.join(
-      baseDir,
-      username.toLowerCase(),
-      format(new Date(), 'yyyy-MM-dd')
-    );
-    this.createDirectories();
+    this.baseDir = path.join(baseDir, username, format(new Date(), 'yyyy-MM-dd'));
   }
 
-  async createDirectories(): Promise<void> {
+  public async createDirectories(): Promise<void> {
     const dirs = ['raw', 'processed', 'analytics', 'exports', 'meta'];
     for (const dir of dirs) {
       const fullPath = path.join(this.baseDir, dir);
@@ -72,7 +89,7 @@ export class DataProcessor {
     }
   }
 
-  getPaths() {
+  public getPaths() {
     return {
       raw: {
         tweets: path.join(this.baseDir, 'raw', 'tweets.json'),
@@ -93,75 +110,84 @@ export class DataProcessor {
     };
   }
 
-  async getLastNextToken(): Promise<string | null> {
+  public async getLastNextToken(): Promise<string | null> {
     try {
-      const data = await fs.readFile(this.getPaths().meta.nextToken, 'utf-8');
-      const trimmed = data.trim();
-      Logger.debug(`Retrieved last next_token: ${trimmed}`);
-      return trimmed || null;
+      const tokenPath = this.getPaths().meta.nextToken;
+      const exists = await fs.access(tokenPath).then(() => true).catch(() => false);
+      if (exists) {
+        const token = await fs.readFile(tokenPath, 'utf-8');
+        return token.trim();
+      }
     } catch (error) {
-      Logger.warn('No next_token found. Starting fresh.');
-      return null;
+      Logger.debug(`Failed to read next token: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    return null;
+  }
+
+  public async saveNextToken(token: string): Promise<void> {
+    try {
+      await fs.mkdir(path.dirname(this.getPaths().meta.nextToken), { recursive: true });
+      await fs.writeFile(this.getPaths().meta.nextToken, token, 'utf-8');
+    } catch (error) {
+      Logger.warn(`Failed to save next token: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
-  async saveNextToken(nextToken: string): Promise<void> {
+  public async saveTweets(tweets: Tweet[]): Promise<Analytics> {
     try {
-      await fs.writeFile(this.getPaths().meta.nextToken, nextToken, 'utf-8');
-      Logger.debug(`Saved next_token: ${nextToken}`);
-    } catch (error) {
-      Logger.warn(`Failed to save next_token: ${error instanceof Error ? error.message : String(error)}`);
-    }
-  }
+      const paths = this.getPaths();
+      await fs.mkdir(path.dirname(paths.raw.tweets), { recursive: true });
 
-  async saveTweets(tweets: Tweet[]): Promise<Analytics> {
-    const paths = this.getPaths();
-
-    try {
       // Save raw tweets
+      Logger.info(`Saving ${tweets.length} tweets to ${paths.raw.tweets}`);
       await fs.writeFile(
         paths.raw.tweets,
         JSON.stringify(tweets, null, 2),
         'utf-8'
       );
-      Logger.success(`Saved tweets to ${paths.raw.tweets}`);
+      Logger.success(`✅ Saved raw tweets`);
 
       // Save tweet URLs
+      Logger.info(`Saving tweet URLs to ${paths.raw.urls}`);
       const urls = tweets.map(t => `https://twitter.com/${t.user.screen_name}/status/${t.id_str}`);
       await fs.writeFile(paths.raw.urls, urls.join('\n'), 'utf-8');
-      Logger.success(`Saved tweet URLs to ${paths.raw.urls}`);
+      Logger.success(`✅ Saved tweet URLs`);
 
       // Generate and save analytics
-      const analytics = this.generateAnalytics(tweets);
+      Logger.info(`Generating analytics...`);
+      const analytics = this.generateAnalytics(tweets as ExtendedTweet[]);
       await fs.writeFile(
         paths.analytics.stats,
         JSON.stringify(analytics, null, 2),
         'utf-8'
       );
-      Logger.success(`Saved analytics to ${paths.analytics.stats}`);
+      Logger.success(`✅ Saved analytics`);
 
       // Generate and save fine-tuning data
+      Logger.info(`Generating fine-tuning data...`);
       const finetuningData = this.generateFinetuningData(tweets);
       if (finetuningData.length > 0) {
+        await fs.mkdir(path.dirname(paths.processed.finetuning), { recursive: true });
         await fs.writeFile(
           paths.processed.finetuning,
           finetuningData.map(d => JSON.stringify(d)).join('\n'),
           'utf-8'
         );
-        Logger.success(`Saved fine-tuning data to ${paths.processed.finetuning}`);
+        Logger.success(`✅ Saved ${finetuningData.length} fine-tuning entries`);
       } else {
-        Logger.warn('No fine-tuning data to save.');
+        Logger.warn(`⚠️  No fine-tuning data to save`);
       }
 
       return analytics;
     } catch (error) {
-      Logger.error(`Error saving data: ${error instanceof Error ? error.message : String(error)}`);
+      Logger.error(`Failed to save tweets: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     }
   }
 
-  generateAnalytics(tweets: Tweet[]): Analytics {
+  public generateAnalytics(tweets: ExtendedTweet[]): Analytics {
     if (tweets.length === 0) {
+      Logger.warn('⚠️  No tweets to analyze.');
       return {
         totalTweets: 0,
         directTweets: 0,
@@ -187,54 +213,83 @@ export class DataProcessor {
       };
     }
 
-    const dates = tweets
-      .map(t => {
-        const timestamp = new Date(t.created_at).getTime();
-        return isNaN(timestamp) ? null : timestamp;
-      })
-      .filter((d): d is number => d !== null)
-      .sort();
+    const validTweets = tweets.filter((t) => {
+      const timestamp = new Date(t.created_at).getTime();
+      return !isNaN(timestamp) && timestamp > 0;
+    });
 
-    // Filter out retweets for engagement metrics
-    const tweetsForEngagement = tweets.filter(t => !t.retweeted_status_id_str);
+    const invalidTweets = tweets.filter((t) => {
+      const timestamp = new Date(t.created_at).getTime();
+      return isNaN(timestamp) || timestamp <= 0;
+    });
 
-    const totalLikes = tweetsForEngagement.reduce((sum, t) => sum + t.favorite_count, 0);
+    if (invalidTweets.length > 0) {
+      Logger.warn(
+        `⚠️  Found ${invalidTweets.length} tweets with invalid or missing dates. They will be excluded from analytics.`
+      );
+    }
+
+    const validDates = validTweets
+      .map((t) => new Date(t.created_at).getTime())
+      .sort((a, b) => a - b);
+
+    const tweetsForEngagement = tweets.filter((t) => !t.retweeted_status_id_str);
 
     return {
       totalTweets: tweets.length,
-      directTweets: tweets.filter(t => !t.in_reply_to_status_id_str && !t.retweeted_status_id_str).length,
-      replies: tweets.filter(t => t.in_reply_to_status_id_str).length,
-      retweets: tweets.filter(t => t.retweeted_status_id_str).length,
+      directTweets: tweets.filter((t) => !t.in_reply_to_status_id_str && !t.retweeted_status_id_str).length,
+      replies: tweets.filter((t) => t.in_reply_to_status_id_str).length,
+      retweets: tweets.filter((t) => t.retweeted_status_id_str).length,
       engagement: {
-        totalLikes,
-        totalRetweetCount: tweetsForEngagement.reduce((sum, t) => sum + t.retweet_count, 0),
-        totalReplies: 0, // Not available in basic Tweet type
-        averageLikes: (totalLikes / tweetsForEngagement.length).toFixed(2),
+        totalLikes: tweetsForEngagement.reduce(
+          (sum, t) => sum + (t.favorite_count || 0),
+          0
+        ),
+        totalRetweetCount: tweetsForEngagement.reduce(
+          (sum, t) => sum + (t.retweet_count || 0),
+          0
+        ),
+        totalReplies: tweetsForEngagement.reduce(
+          (sum, t) => sum + (t.reply_count || 0),
+          0
+        ),
+        averageLikes: (
+          tweetsForEngagement.reduce((sum, t) => sum + (t.favorite_count || 0), 0) /
+          tweetsForEngagement.length
+        ).toFixed(2),
         topTweets: tweetsForEngagement
-          .sort((a, b) => b.favorite_count - a.favorite_count)
+          .sort((a, b) => (b.favorite_count || 0) - (a.favorite_count || 0))
           .slice(0, 5)
-          .map(t => ({
+          .map((t) => ({
             id: t.id_str,
-            text: t.text.slice(0, 100),
-            likes: t.favorite_count,
-            retweetCount: t.retweet_count,
+            text: t.text.slice(0, 100) + (t.text.length > 100 ? '...' : ''),
+            likes: t.favorite_count || 0,
+            retweetCount: t.retweet_count || 0,
             url: `https://twitter.com/${t.user.screen_name}/status/${t.id_str}`,
           })),
       },
       timeRange: {
-        start: dates.length > 0 ? format(dates[0]!, 'yyyy-MM-dd') : 'N/A',
-        end: dates.length > 0 ? format(dates[dates.length - 1]!, 'yyyy-MM-dd') : 'N/A',
+        start: validDates.length > 0
+          ? format(validDates[0]!, 'yyyy-MM-dd')
+          : 'N/A',
+        end: validDates.length > 0
+          ? format(validDates[validDates.length - 1]!, 'yyyy-MM-dd')
+          : 'N/A',
       },
       contentTypes: {
-        withImages: 0, // Media entities not in basic Tweet type
-        withVideos: 0, // Media entities not in basic Tweet type
-        withLinks: tweets.filter(t => t.entities.urls.length > 0).length,
-        textOnly: tweets.filter(t => t.entities.urls.length === 0).length,
+        withImages: tweets.filter((t) => t.entities.media?.some(m => m.type === 'photo')).length,
+        withVideos: tweets.filter((t) => t.entities.media?.some(m => m.type === 'video')).length,
+        withLinks: tweets.filter((t) => t.entities.urls?.length > 0).length,
+        textOnly: tweets.filter(
+          (t) =>
+            (!t.entities.media || t.entities.media.length === 0) &&
+            (!t.entities.urls || t.entities.urls.length === 0)
+        ).length,
       },
     };
   }
 
-  generateFinetuningData(tweets: Tweet[]): FinetuningData[] {
+  public generateFinetuningData(tweets: Tweet[]): FinetuningData[] {
     return tweets
       .filter(t => !t.retweeted_status_id_str && !t.in_reply_to_status_id_str) // Exclude retweets and replies
       .map(tweet => ({

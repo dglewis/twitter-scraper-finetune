@@ -9,6 +9,7 @@ vi.mock('fs', () => ({
     mkdir: vi.fn(),
     writeFile: vi.fn(),
     readFile: vi.fn(),
+    access: vi.fn(),
   },
 }));
 
@@ -86,6 +87,7 @@ describe('DataProcessor', () => {
     it('should save and retrieve next token', async () => {
       const mockToken = 'test_token_123';
       vi.mocked(fs.readFile).mockResolvedValueOnce(mockToken);
+      vi.mocked(fs.access).mockResolvedValueOnce(undefined);
 
       await processor.saveNextToken(mockToken);
       const retrievedToken = await processor.getLastNextToken();
