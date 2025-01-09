@@ -7,7 +7,7 @@ export class CLI {
   private pipeline!: TwitterPipeline;
   private collectionMode: CollectionMode = CollectionMode.Timeline;
   private username!: string;
-  private limit: number = 1000;
+  private limit: number = parseInt(process.env.MAX_TWEETS || '1000');
   private initialized: boolean = false;
 
   constructor() {
